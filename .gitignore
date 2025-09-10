@@ -28,3 +28,7 @@ bun-debug.log*
 # macOS / Linux / Windows junk
 .DS_Store
 Thumbs.db
+# dependencies
+node_modules
+.pnp.*
+.pnpstore/
