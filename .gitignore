@@ -1,0 +1,30 @@
+# dependencies
+node_modules
+.pnpm-debug.log*
+yarn.lock
+package-lock.json
+
+# build output
+dist
+.astro
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# environment variables
+.env
+.env.*.local
+
+# editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS / Linux / Windows junk
+.DS_Store
+Thumbs.db

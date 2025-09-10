@@ -1,0 +1,28 @@
+{
+    "name": "Astro Portfolio Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "workspaceFolder": "/workspace",
+    "remoteUser": "node", // or vscode if you define it yourself
+    "updateRemoteUserUID": false,
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "astro-build.astro-vscode", // Astro syntax + IntelliSense
+                "esbenp.prettier-vscode", // Prettier formatter
+                "dbaeumer.vscode-eslint" // ESLint support
+            ]
+        }
+    },
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+        "source=${localWorkspaceFolderBasename}-node_modules,target=/workspace/node_modules,type=volume"
+    ],
+    "forwardPorts": [
+        3000,
+        4321
+    ],
+    "postCreateCommand": "bash -lc 'corepack enable && corepack prepare pnpm@latest --activate || true; if [ -f package.json ]; then pnpm install || npm install; fi'",
+}
