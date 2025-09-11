@@ -3,7 +3,7 @@ name: Deploy Astro site to GitHub Pages
 on:
   push:
     branches:
-      - astro-dev  # or master
+      - astro-dev # or master
 
 permissions:
   contents: read
@@ -20,14 +20,15 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9   # or whatever version you're using, or 'latest'       
+          version: 9 # or whatever version you're using, or 'latest'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
-          
+          cache-dependency-path: astrosite/pnpm-lock.yaml
+
       - name: Install dependencies
         run: |
           cd astrosite
