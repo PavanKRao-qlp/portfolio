@@ -7,5 +7,12 @@ import tailwind from "@astrojs/tailwind";
 export default defineConfig({
   site: 'https://pavankrao-qlp.github.io/portfolio/',
   base: '/portfolio/',
-  integrations: [mdx(), sitemap(), tailwind()]
+  integrations: [mdx(), sitemap(), tailwind()],
+   vite: {
+    server: {
+      watch: {
+        usePolling: true,
+      },
+    },
+  }
 });

@@ -5,10 +5,10 @@
   "version": "3.0.0",
   "private": true,
   "scripts": {
-    "dev": "astro dev --host",
-    "start": "astro dev --host",
+    "dev": "astro dev --host 0.0.0.0 --port 4321 --watch=poll",
+    "start": "astro dev --host 0.0.0.0 --port 4321",
     "build": "astro build",
-    "preview": "astro preview",
+    "preview": "astro preview --host 0.0.0.0 --port 4321",
     "astro": "astro"
   },
   "dependencies": {

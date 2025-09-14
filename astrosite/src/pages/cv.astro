@@ -4,6 +4,14 @@ import TimeLineElement from "../components/cv/TimeLine.astro";
 ---
 
 <BaseLayout title="Resume" sideBarActiveItemID="cv">
+  <br />
+  <section class="mx-auto max-w-6xl p-6">
+    <iframe
+      src={`${import.meta.env.BASE_URL}resumebase.pdf`}
+      class="w-full h-[800px] border rounded-lg"></iframe>
+  </section>
+  <br />
+  <!--   
   <div class="mb-5">
     <div class="text-3xl w-full font-bold">Profile</div>
   </div>
@@ -88,5 +96,5 @@ import TimeLineElement from "../components/cv/TimeLine.astro";
     <li>Skill Name</li>
     <li>Skill Name</li>
     <li>Skill Name</li>
-  </ul>
+  </ul> -->
 </BaseLayout>

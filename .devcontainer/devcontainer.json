@@ -12,7 +12,9 @@
             "extensions": [
                 "astro-build.astro-vscode", // Astro syntax + IntelliSense
                 "esbenp.prettier-vscode", // Prettier formatter
-                "dbaeumer.vscode-eslint" // ESLint support
+                "dbaeumer.vscode-eslint", // ESLint support
+                "unifiedjs.vscode-mdx",
+                "xyc.vscode-mdx-preview"
             ]
         }
     },

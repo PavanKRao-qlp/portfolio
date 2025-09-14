@@ -1,188 +1,113 @@
 ---
-// src/pages/index.astro
-const linkedInUrl = "https://www.linkedin.com/in/pavan-kumar-rao-82949b119/"; // replace with your LinkedIn
+import BaseLayout from "../layouts/BaseLayout.astro";
+import HorizontalCard from "../components/HorizontalCard.astro";
+import { getCollection } from "astro:content";
+import { getEntryBySlug } from "astro:content";
+import createSlug from "../lib/createSlug";
+
+const about = await getEntryBySlug("about", "about");
+const projects = await getCollection("project");
+const posts = (await getCollection("blog")).sort(
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
+);
+// filter pinned projects
+const pinnedProjects = projects.filter((p) => p.data.pin).sort((a, b) => 1);
+
+const { Content: AboutMe } = await about.render();
+const last_posts = posts.slice(0, 3);
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Under Maintenance</title>
-    <style>
-      body {
-        margin: 0;
-        font-family: system-ui, sans-serif;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        background: linear-gradient(135deg, #f9fafb, #e5e7eb);
-        text-align: center;
-        color: #333;
-      }
+<BaseLayout>
+  <section class="prose max-w-6xl p-6">
+    <AboutMe />
+    <!-- renders the MDX -->
+    <section>
+      <div>
+        <div class="text-2xl w-full font-bold mb-2">
+          Projects I've Worked On
+        </div>
+      </div>
+    </section>
+    {
+      pinnedProjects.map((post) => (
+        <>
+          <HorizontalCard
+            title={post.data.title}
+            img={post.data.heroImage}
+            desc={post.data.description}
+            url={"/blog/"}
+          />
+          <div class="divider my-0" />
+        </>
+      ))
+    }
+    <div class="mt-8">
+      <a href={`${import.meta.env.BASE_URL}projects/`}>
+        <button class="btn btn-block btn-info">See More</button>
+      </a>
+    </div>
+  </section>
+  <section>
+    <div>
+      <div class="text-2xl w-full font-bold mb-5 mt-10">Latest from blog</div>
+    </div>
+    {
+      last_posts.map((post) => (
+        <>
+          <HorizontalCard
+            title={post.data.title}
+            img={post.data.heroImage}
+            desc={post.data.description}
+            url={"/blog/" + createSlug(post.data.title, post.slug)}
+            target="_self"
+            badge={post.data.badge}
+          />
+          <div class="divider my-0" />
+        </>
+      ))
+    }
+    <div class="mt-8">
+      <a href={`${import.meta.env.BASE_URL}blog/`}>
+        <button class="btn btn-block btn-wide btn-info">See More</button></a
+      >
+    </div>
+  </section>
 
-      h1 {
-        font-size: 2.5rem;
-        margin: 1rem 0;
-        color: #1f2937;
-        filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.2));
-      }
+  <section class="block">
+    <div>
+      <div class="text-2xl w-full font-bold mb-5 mt-10">Contact</div>
+    </div>
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-5xl mx-auto">
+      <div class="card card-border bg-base-100 card-sm w-96 shadow-sm">
+        <div class="card-body">
+          <h3 class="card-title">Address</h3>
+          <p>Baner, Pune,<br /> Maharashtra 411045</p>
+        </div>
+      </div>
 
-      p {
-        font-size: 1.1rem;
-        margin: 0.5rem 0 2rem 0;
-        filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.2));
-      }
+      <div class="card card-border bg-base-100 card-sm w-96 shadow-sm">
+        <div class="card-body">
+          <h3 class="card-title">Phone</h3>
+          <p>(+91) 7624853821</p>
+        </div>
+      </div>
 
-      a {
-        display: inline-block;
-        padding: 0.6rem 1.2rem;
-        background-color: #0a66c2;
-        color: #fff;
-        border-radius: 8px;
-        text-decoration: none;
-        font-weight: bold;
-        transition: background-color 0.3s ease;
-        filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.2));
-      }
+      <div class="card card-border bg-base-100 card-sm w-96 shadow-sm">
+        <div class="card-body">
+          <h2 class="card-title">Email</h2>
+          <a>raopavank@gmail.com</a>
+        </div>
+      </div>
 
-      a:hover {
-        background-color: #084a9e;
-      }
-
-      svg {
-        width: 200px;
-        height: 200px;
-        margin-bottom: 2rem;
-        filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.2));
-      }
-    </style>
-  </head>
-  <body>
-    <!-- Simple maintenance SVG -->
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      xml:space="preserve"
-      width="655.359"
-      height="655.359"
-      style="shape-rendering:geometricPrecision;text-rendering:geometricPrecision;image-rendering:optimizeQuality;fill-rule:evenodd;clip-rule:evenodd"
-      viewBox="0 0 6.827 6.827"
-      ><defs
-        ><clipPath id="id0"
-          ><path
-            d="M3.413 0a3.413 3.413 0 1 1 0 6.827 3.413 3.413 0 0 1 0-6.827z"
-          ></path></clipPath
-        ><style>
-          .fil2 {
-            fill: none;
-          }
-          .fil1 {
-            fill: hsl(225, 78%, 43%);
-          }
-        </style></defs
-      ><g id="Layer_x0020_1"
-        ><path
-          d="M3.413 0a3.413 3.413 0 1 1 0 6.827 3.413 3.413 0 0 1 0-6.827z"
-          style="fill:hsl(225, 82%, 59%)"></path><g style="clip-path:url(#id0)"
-          ><g id="_414983264"
-            ><path
-              id="_3548815521"
-              class="fil1"
-              d="m4.77 2.43 3.787 3.786.032.04.031.04.03.041.027.043.026.044.025.045.023.046.021.047.02.048.017.05-3.786-3.787-.018-.05-.02-.048-.02-.047-.023-.046-.025-.045-.026-.043-.028-.043-.03-.042-.03-.04z"
-            ></path><path
-              id="_354881288"
-              class="fil1"
-              d="M3.707 1.642 7.493 5.43l.004.006.004.006.004.007.002.007.002.007.001.008v.008L3.726 1.692v-.008l-.002-.008-.002-.007-.003-.007-.003-.007-.004-.007z"
-            ></path><path
-              id="_354882200"
-              class="fil1"
-              d="m3.724 1.692 3.787 3.786v.15L3.724 1.84z"></path><path
-              id="_354882248"
-              class="fil1"
-              d="m5.278 3.32 3.786 3.786.002.008v.016l-.001.007-.002.007-.002.008-.003.006-.004.007-.004.006-.005.005-.005.006-.006.004-.007.004-.007.004-.007.003-.008.002L5.22 3.413l.008-.003.007-.002.007-.004.006-.004.006-.005.006-.005.005-.005.004-.006.004-.007.003-.007.002-.007.002-.007v-.008l.001-.007v-.008z"
-            ></path><path
-              id="_354881864"
-              class="fil1"
-              d="m5.22 3.413 3.785 3.786-.053.011-.054.012-.054.01-.054.011-.055.01-.055.01-.055.01-.055.009-.056.009-.056.008-.055.008-.057.008-.056.007-.056.007-.057.006-.057.006-.057.006-.057.006-.057.005-.057.004-.057.005-.058.003-.057.004-.058.003-.058.003-.057.002-.058.002-.058.002-.058.001-.058.001h-.058L7.2 7.39 3.413 3.603h.058l.058-.001.058-.001.058-.001.058-.002.057-.002.058-.002.058-.003.057-.003.058-.004.057-.004.058-.004.057-.005.057-.005.057-.005.057-.006.057-.006.056-.006.057-.007.056-.008.056-.007.056-.008.056-.009.055-.008.056-.01.055-.009.055-.01.054-.01.055-.01.054-.011.054-.012z"
-            ></path><path
-              id="_354882608"
-              class="fil1"
-              d="M3.413 3.603 7.2 7.389h-.116l-.058-.002-.058-.001-.058-.002-.057-.002-.058-.002-.058-.003-.058-.003-.057-.004-.057-.003-.058-.005-.057-.004-.057-.005-.057-.006-.057-.006-.057-.006-.056-.006-.057-.007-.056-.007-.056-.008L5.94 7.3l-.056-.008-.055-.009-.056-.01-.055-.009-.055-.01-.054-.01-.055-.01-.054-.011-.054-.012-.053-.011-3.787-3.786.054.011.054.012.054.01.054.011.055.01.055.01.055.01.055.009.056.008.055.009.056.008.057.007.056.008.056.007.057.006.057.006.056.006.058.005.057.005.057.005.057.004.058.004.057.004.058.003.058.003.057.002.058.002.058.002.058.001.058.001h.057z"
-            ></path><path
-              id="_354882920"
-              class="fil1"
-              d="m1.607 3.413 3.787 3.786-.008-.002-.007-.003-.007-.004-.006-.004-.006-.004-3.787-3.787.006.005.007.004.007.004.007.002z"
-            ></path><path
-              id="_354882464"
-              class="fil1"
-              d="m5.023 2.873 3.786 3.786.002.006.002.006.002.005.001.006.002.006.002.005.002.006.001.006.002.006.002.006.001.006.002.005.002.006.001.006.002.006.001.006.002.006.001.006.002.006v.006l.002.006.002.006.001.006.001.006.002.006v.006l.002.006.001.006.001.006.002.006v.006l.002.006L5.07 3.062l-.002-.006V3.05l-.002-.006-.001-.007-.001-.006-.001-.006-.002-.006-.001-.006-.001-.006-.002-.006v-.006l-.002-.006-.002-.006-.001-.006-.002-.006-.001-.005-.002-.006-.001-.006-.002-.006-.001-.006-.002-.006-.002-.006-.001-.005-.002-.006-.002-.006-.001-.006-.002-.006-.002-.005-.002-.006-.002-.006-.001-.005z"
-            ></path><path
-              id="_354883016"
-              class="fil1"
-              d="M5.2 3.035 8.987 6.82l.003.005.004.005.003.006.003.008.004.008.003.008.004.01.003.01.003.01.003.01.003.012.003.011.003.012.003.012.003.011.002.012.003.012.003.012.002.011.002.012.002.01.003.011.001.01.002.01.002.01.002.008.001.007.001.007.002.006v.005l.001.004L5.278 3.32v-.004l-.002-.005v-.006l-.002-.007-.002-.008-.001-.008-.002-.01-.002-.009-.002-.01-.002-.01-.002-.011-.002-.012-.003-.011-.002-.012-.003-.012-.003-.012-.002-.012-.003-.012-.003-.011-.003-.012-.003-.01-.003-.012-.003-.01-.004-.01-.003-.009-.003-.009-.004-.008-.003-.007-.004-.006-.003-.006z"
-            ></path><path
-              id="_354882488"
-              class="fil1"
-              d="m2.65 4.018 3.787 3.786.03.03.028.032.027.034.024.037.022.038.02.04-3.785-3.786-.02-.04-.023-.039-.025-.036-.026-.034-.028-.032z"
-            ></path><path
-              id="_354882704"
-              class="fil1"
-              d="M5.095 4.314 8.88 8.101l.01.01.009.01.009.012.008.011.007.012.007.012.007.013.006.013.005.013.005.013.004.014.003.014.002.015.002.014.001.015v.015L5.182 4.521v-.015l-.002-.015-.002-.014-.002-.015-.004-.014-.004-.014-.004-.013-.006-.014-.005-.013-.007-.012-.007-.012-.008-.012-.008-.012-.008-.01-.01-.011z"
-            ></path><path
-              id="_354882560"
-              class="fil1"
-              d="m5.18 4.52 3.787 3.787v.015l-.002.015-.002.015-.002.014-.003.014-.004.014-.005.014-.005.013-.006.013-.007.012-.007.013-.007.011-.008.012-.01.01-.008.012-.01.01-.01.01-.01.009-.012.008-.011.008-.012.008-.012.007-.013.007-.013.005-.013.006-.014.004-.014.004-.014.004-.014.002-.015.002-.014.001h-.015L4.888 4.813h.015l.015-.001.015-.002.014-.003.014-.003.014-.004.014-.005.013-.005.013-.006.012-.006.013-.007.011-.008.012-.008.01-.009.012-.009.01-.01.01-.01.009-.01.008-.011.008-.012.008-.012.007-.012.007-.013.005-.013.006-.013.004-.013.004-.014.004-.014.002-.015.002-.014.001-.015z"
-            ></path><path
-              id="_354882632"
-              class="fil1"
-              d="M4.888 4.813 8.675 8.6H6.589L2.803 4.813z"></path><path
-              id="_354882728"
-              class="fil1"
-              d="M2.083 4.175 5.87 7.962h-.363L1.72 4.175z"></path><path
-              id="_354882800"
-              class="fil1"
-              d="m1.72 4.175 3.786 3.787H5.5l-.006-.001-.006-.001-.005-.002-.005-.002-.005-.002-.005-.003-.005-.003-.004-.003-3.786-3.786.004.003.005.003.004.003.005.002.006.002.005.001.006.001.006.001z"
-            ></path><path
-              id="_354883592"
-              class="fil1"
-              d="M2.803 4.813 6.589 8.6l-.021.042-.023.039-.025.036-.027.035-.028.032-.03.03-.033.029-.033.025-.035.024-.035.021-.037.019-.038.017-.039.014-.039.012-.04.01-.04.007-.041.005-.041.003h-.041l-.041-.003-.041-.004-.041-.007-.04-.01-.04-.012-.04-.014-.038-.017-.038-.02-.037-.022-.036-.024-.034-.027-3.786-3.787.034.027.036.025.037.022.037.02.039.016.04.015.04.012.04.01.04.007.041.004.041.002h.042l.04-.002.041-.005.04-.008.04-.01.04-.011.039-.015.038-.016.036-.02.036-.02.035-.024.033-.026.032-.028.03-.03.029-.032.027-.035.025-.037.023-.039z"
-            ></path><path
-              id="_414983336"
-              class="fil1"
-              d="M3.802 1.858c.546.137 1.043.483 1.22 1.015.02.06.037.124.049.189l.126-.03c.038.03.073.25.081.288a.077.077 0 0 1-.059.093c-.57.126-1.188.19-1.806.19a8.408 8.408 0 0 1-1.806-.19.077.077 0 0 1-.058-.093c.008-.038.043-.257.08-.289l.125.03c.088-.536.481-.905.962-1.103a1.5 1.5 0 0 1 .386-.127v-.14c0-.042.035-.077.078-.077h.467c.043 0 .077.035.077.078v.149c.027.005.053.011.078.018v-.001zM1.67 4.048a.693.693 0 0 1 1.134.18h2.085a.293.293 0 0 1 0 .585H2.803a.693.693 0 0 1-1.137.177s-.055-.124.054-.124h.363c.064-.109.131-.242.2-.345l-.1-.173c-.032-.055-.072-.117-.1-.173H1.72a.074.074 0 0 1-.05-.127z"
-            ></path></g
-          ></g
-        ><path
-          class="fil2"
-          d="M3.413 0a3.413 3.413 0 1 1 0 6.827 3.413 3.413 0 0 1 0-6.827z"
-        ></path><path
-          d="M1.67 4.048a.693.693 0 0 1 1.133.18h2.085a.293.293 0 0 1 0 .585H2.803a.693.693 0 0 1-1.137.177s-.055-.124.054-.124h.363c.064-.109.131-.242.2-.345l-.1-.173c-.032-.055-.072-.117-.1-.173H1.72a.074.074 0 0 1-.05-.127z"
-          style="fill:#b3b9bd"></path><path
-          d="M1.853 4.054h.305l.034.067c.028.057.064.111.096.166l.1.174.037.065-.041.062c-.072.108-.13.228-.196.34l-.036.062-.07-.002h-.236a.573.573 0 0 0 .846-.226l.033-.07h2.163c.094 0 .171-.077.171-.171a.171.171 0 0 0-.17-.17H2.724l-.033-.071a.571.571 0 0 0-.84-.226z"
-          style="fill:#ccd1d4"></path><path
-          d="M1.753 3.073c.933-2.16 3.11-1.148 3.32 0a7.4 7.4 0 0 1-3.32 0z"
-          style="fill:#f6ce03"></path><path
-          d="M5.278 3.32a.077.077 0 0 1-.059.092c-.57.127-1.188.19-1.806.19a8.408 8.408 0 0 1-1.806-.19.077.077 0 0 1-.058-.092c.008-.038.043-.257.08-.289.571.145 1.178.217 1.784.217.606 0 1.213-.073 1.784-.217.038.032.073.251.081.29z"
-          style="fill:#cfb014"></path><path
-          d="M3.18 1.614h.467c.043 0 .077.035.077.078v.978a.078.078 0 0 1-.077.078H3.18a.078.078 0 0 1-.078-.078v-.978c0-.043.035-.078.078-.078z"
-          style="fill:#cfb014;fill-rule:nonzero"></path><path
-          class="fil2"
-          style="stroke:#424242;stroke-width:.00333465;stroke-linecap:round;stroke-linejoin:round"
-          d="M1.631 4.885h0"></path><path
-          d="M1.753 3.073c.101-.654.654-1.062 1.271-1.215v.812c0 .086.07.155.156.155h.467c.086 0 .155-.07.155-.155v-.812c.612.154 1.162.57 1.27 1.215a7.29 7.29 0 0 1-1.66.188 7.281 7.281 0 0 1-1.66-.188z"
-          style="fill:#fae204"></path><path
-          d="M1.753 3.073c.01-.07.026-.137.047-.201.52.117 1.067.176 1.613.176.545 0 1.09-.059 1.61-.175.021.064.038.13.05.2a7.29 7.29 0 0 1-1.66.188 7.281 7.281 0 0 1-1.66-.188z"
-          style="fill:#f0d800"></path><path
-          d="M2.866 4.423h1.92c.043 0 .078.044.078.098 0 .054-.035.098-.078.098h-1.92c-.043 0-.078-.044-.078-.098 0-.054.035-.098.078-.098z"
-          style="fill:#949ba1"></path></g
-      ></svg
-    >
-
-    <h1>🚧 Site Under Maintenance 🚧</h1>
-    <p>I am updating the site. Meanwhile, connect with me on LinkedIn:</p>
-    <a href={linkedInUrl} target="_blank" rel="noopener noreferrer"
-      >LinkedIn Profile</a
-    >
-  </body>
-</html>
+      <div class="card card-border bg-base-100 card-sm w-96 shadow-sm">
+        <div class="card-body">
+          <h3 class="card-title">Socials</h3>
+          <p>
+            A card component has a figure, a body part, and inside body there
+            are title and actions parts
+          </p>
+        </div>
+      </div>
+    </section>
+  </section>
+</BaseLayout>

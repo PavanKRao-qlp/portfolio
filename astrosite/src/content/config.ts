@@ -1,4 +1,26 @@
 import { z, defineCollection } from "astro:content";
+
+// const storeSchema = z.object({
+//     title: z.string(),
+//     description: z.string(),
+//     custom_link_label: z.string(),
+//     custom_link: z.string().optional(),
+//     updatedDate: z.coerce.date(),
+//     pricing: z.string().optional(),
+//     oldPricing: z.string().optional(),
+//     badge: z.string().optional(),
+//     checkoutUrl: z.string().optional(),
+//     heroImage: z.string().optional(),
+// });
+
+const about = defineCollection({
+  type: "content",
+  schema: z.object({
+    title: z.string().optional(),
+  }),
+});
+
+
 const blogSchema = z.object({
     title: z.string(),
     description: z.string(),
@@ -10,27 +32,30 @@ const blogSchema = z.object({
         message: 'tags must be unique',
     }).optional(),
 });
+export type BlogSchema = z.infer<typeof blogSchema>;
+const blogCollection = defineCollection({ schema: blogSchema });
 
-const storeSchema = z.object({
+
+
+const projectSchema = z.object({
     title: z.string(),
     description: z.string(),
-    custom_link_label: z.string(),
-    custom_link: z.string().optional(),
-    updatedDate: z.coerce.date(),
-    pricing: z.string().optional(),
-    oldPricing: z.string().optional(),
-    badge: z.string().optional(),
-    checkoutUrl: z.string().optional(),
+    pubDate: z.coerce.date(),
+    updatedDate: z.string().optional(),
     heroImage: z.string().optional(),
+    badge: z.string().optional(),    
+    priority: z.number().int().optional(),
+    pin: z.boolean().default(false).optional()
 });
+export type ProjectSchema = z.infer<typeof projectSchema>;
+const projectCollection = defineCollection({schema: projectSchema});
 
-export type BlogSchema = z.infer<typeof blogSchema>;
-export type StoreSchema = z.infer<typeof storeSchema>;
+//export type StoreSchema = z.infer<typeof storeSchema>;
 
-const blogCollection = defineCollection({ schema: blogSchema });
-const storeCollection = defineCollection({ schema: storeSchema });
+//const storeCollection = defineCollection({ schema: storeSchema });
 
 export const collections = {
+    about,
     'blog': blogCollection,
-    'store': storeCollection
+    'project': projectSchema
 }
