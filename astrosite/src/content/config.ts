@@ -40,12 +40,12 @@ const blogCollection = defineCollection({ schema: blogSchema });
 const projectSchema = z.object({
     title: z.string(),
     description: z.string(),
-    pubDate: z.coerce.date(),
     updatedDate: z.string().optional(),
     heroImage: z.string().optional(),
     badge: z.string().optional(),    
     priority: z.number().int().optional(),
-    pin: z.boolean().default(false).optional()
+    pin: z.boolean().default(false).optional(),
+    type: z.enum(["work", "personal"]).default("personal")// 👈 added
 });
 export type ProjectSchema = z.infer<typeof projectSchema>;
 const projectCollection = defineCollection({schema: projectSchema});
@@ -57,5 +57,5 @@ const projectCollection = defineCollection({schema: projectSchema});
 export const collections = {
     about,
     'blog': blogCollection,
-    'project': projectSchema
+    'projects': projectCollection
 }
