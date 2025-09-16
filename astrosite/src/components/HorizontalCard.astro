@@ -12,7 +12,7 @@ const tag_url = url ? url.split("/").slice(0, -1).join("/") + "/tag" : null;
   {
     url ? (
       <a href={url} target={target}>
-        <div class="hero-content flex-col md:flex-row">
+        <div class="hero-content flex-row md:flex-row">
           {img && (
             <Image
               src={`${import.meta.env.BASE_URL}${img}`}
@@ -20,7 +20,7 @@ const tag_url = url ? url.split("/").slice(0, -1).join("/") + "/tag" : null;
               height={422}
               format="webp"
               alt={title}
-              class="max-w-full md:max-w-[13rem] rounded-lg"
+              class="max-w-[13rem] rounded-lg"
             />
           )}
           <div class="grow w-full">
@@ -29,6 +29,7 @@ const tag_url = url ? url.split("/").slice(0, -1).join("/") + "/tag" : null;
               {badge && <div class="badge badge-secondary mx-2">{badge}</div>}
             </h1>
             <p class="py-1 text-1xl">{desc}</p>
+
             <div class="card-actions justify-end">
               {tags &&
                 tag_url &&

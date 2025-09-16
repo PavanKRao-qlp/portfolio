@@ -37,6 +37,7 @@ const last_posts = posts.slice(0, 3);
             title={post.data.title}
             img={post.data.heroImage}
             desc={post.data.description}
+            target="_self"
             url={`${import.meta.env.BASE_URL}projects/${createSlug(post.data.title, post.slug)}`}
           />
           <div class="divider my-0" />
@@ -49,6 +50,7 @@ const last_posts = posts.slice(0, 3);
       </a>
     </div>
   </section>
+
   <section>
     <div>
       <div class="text-2xl w-full font-bold mb-5 mt-10">Latest from blog</div>
