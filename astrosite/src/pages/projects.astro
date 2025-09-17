@@ -10,7 +10,7 @@ const workProjects = projects
   .sort((a, b) => b.data.priority - a.data.priority);
 const personalProjects = projects
   .filter((p) => p.data.type != "work")
-  .sort((a, b) => a.data.priority - b.data.priority);
+  .sort((a, b) => b.data.priority - a.data.priority);
 ---
 
 <BaseLayout title="Projects" sideBarActiveItemID="projects">
