@@ -8,12 +8,7 @@ export default defineConfig({
   site: 'https://pavankrao-qlp.github.io/portfolio/',
   base: '/portfolio/',
   integrations: [mdx(), sitemap(), tailwind()],
-   vite: {
-    resolve: {
-      alias: {
-        "@": new URL("/src", import.meta.url).pathname,
-      },
-    },
+   vite: {   
     server: {
       watch: {
         usePolling: true,
