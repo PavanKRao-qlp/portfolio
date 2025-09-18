@@ -2,14 +2,14 @@
 const { url, target = "_blank" } = Astro.props;
 if (!url) {
   throw new Error(
-    'GithubCard.astro: "url" prop is required (example: "https://github.com/owner/repo")'
+    'GitHubCard.astro: "url" prop is required (example: "https://github.com/owner/repo")'
   );
 }
 
 // Parse owner/repo from URL
 const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
 if (!match) {
-  throw new Error(`GithubCard.astro: Invalid GitHub URL: ${url}`);
+  throw new Error(`GitHubCard.astro: Invalid GitHub URL: ${url}`);
 }
 const repo = `${match[1]}/${match[2]}`;
 ---
