@@ -12,6 +12,7 @@ const {
   pubDate,
   updatedDate,
   heroImage,
+  coverImage,
   badge,
   tags = [],
 } = Astro.props;
@@ -30,12 +31,12 @@ import { Image } from "astro:assets";
   <main class="md:flex md:justify-center">
     <article class="prose prose-lg max-w-[750px] prose-img:mx-auto">
       {
-        heroImage && (
+        coverImage && (
           <Image
             width={750}
             height={422}
             format="webp"
-            src={`${import.meta.env.BASE_URL}${heroImage}`}
+            src={`${import.meta.env.BASE_URL}${coverImage}`}
             alt={title}
             class="w-full mb-6"
           />

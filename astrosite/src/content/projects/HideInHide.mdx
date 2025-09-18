@@ -1,7 +1,23 @@
 ---
 title: "Hide In Hide"
 description: "rhythm based game about a wolf trying to pretend and blend along with sheep by performing the right action on beat. Made in Unity"
-heroImage: "/baseLogo.jpg"
+heroImage: "/hih.png"
 priority: -5
 pin: true
+---
+import { Image } from "astro:assets";
+import myImage from "../../assets/hideinhide.webp";
+
+**Hide In Hide** is a small rhythm-based game I built back in college with a few friends.  
+The idea was simple but fun: you play as a wolf sneaking into a herd of sheep.  
+To stay disguised, you have to hit the right inputs on the beat, mess it up, and your cover’s blown and the shepard will shoot you.
+
+<Image src={myImage} alt="Hide in Hide" />
+It started out as a game jam project where we just wanted to experiment with rhythm mechanics and 3d voxel based visuals.
+In this project learnt a lot.
+I worked on the following 
+- creating endless scrolling sections for the level
+- handling gesture inputs and mapping them to actions 
+- scoring, general bugs and development
+
 ---
