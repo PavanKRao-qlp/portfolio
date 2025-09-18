@@ -50,7 +50,7 @@ import { Image } from "astro:assets";
         tags &&
           tags.map((tag) => (
             <a
-              href={`/blog/tag/${tag}`}
+              href={`${import.meta.env.BASE_URL}blog/tag/${tag}`}
               class="badge badge-outline ml-2 no-underline"
             >
               {tag}

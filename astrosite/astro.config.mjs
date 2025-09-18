@@ -9,6 +9,11 @@ export default defineConfig({
   base: '/portfolio/',
   integrations: [mdx(), sitemap(), tailwind()],
    vite: {
+    resolve: {
+      alias: {
+        "@": new URL("./src", import.meta.url).pathname,
+      },
+    },
     server: {
       watch: {
         usePolling: true,

@@ -1,0 +1,96 @@
+---
+const { url, target = "_blank" } = Astro.props;
+if (!url) {
+  throw new Error(
+    'GithubCard.astro: "url" prop is required (example: "https://github.com/owner/repo")'
+  );
+}
+
+// Parse owner/repo from URL
+const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
+if (!match) {
+  throw new Error(`GithubCard.astro: Invalid GitHub URL: ${url}`);
+}
+const repo = `${match[1]}/${match[2]}`;
+---
+
+<div class="w-ful p-4">
+  <a href={url} target={target} rel="noopener noreferrer">
+    <div
+      class="card bg-base-100 shadow-md hover:shadow-xl transition ease-in-out hover:scale-[102%] rounded-lg overflow-hidden"
+      data-repo={repo}
+    >
+      <!-- Placeholder until JS fills -->
+      <div class="bg-base-200 px-4 py-2 font-semibold text-lg">Loading…</div>
+      <div class="flex flex-col md:flex-row items-start p-4 gap-4">
+        <div class="w-24 h-24 bg-base-300 rounded-md"></div>
+        <p class="text-sm text-base-content/70 leading-relaxed">
+          Fetching repository…
+        </p>
+      </div>
+    </div>
+  </a>
+</div>
+
+<script type="module">
+  const cards = document.querySelectorAll(".card[data-repo]");
+  for (const card of cards) {
+    if (card.dataset.__loaded === "1") continue;
+    card.dataset.__loaded = "1";
+
+    const repo = card.getAttribute("data-repo");
+    fetch(`https://api.github.com/repos/${repo}`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+      },
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        card.innerHTML = `
+        <!-- Title -->
+        <div class="bg-base-200 px-4 py-2 font-semibold text-lg">
+          ${json.full_name}
+        </div>
+
+        <!-- Body -->
+        <div class="flex flex-col md:flex-row items-start p-4 gap-4">
+          <img class="w-24 h-24 object-cover rounded-md flex-shrink-0" 
+               src="${json.owner.avatar_url}" 
+               alt="${json.owner.login} avatar" />
+          <div class="flex flex-col gap-2 w-full">
+            <p class="text-sm text-base-content/80 leading-relaxed">
+              ${json.description ?? "No description provided."}
+            </p>
+            
+            <!-- Stars & Forks -->
+            <div class="flex gap-4 text-sm text-base-content/70 mt-2">
+              <span>⭐ ${json.stargazers_count}</span>
+              <span>🍴 ${json.forks_count}</span>
+            </div>
+
+            <!-- Topics -->
+            ${
+              json.topics && json.topics.length > 0
+                ? `<div class="flex flex-wrap gap-2 mt-3">
+                    ${json.topics
+                      .map(
+                        (topic) =>
+                          `<span class="badge badge-outline">${topic}</span>`
+                      )
+                      .join("")}
+                   </div>`
+                : ""
+            }
+          </div>
+        </div>
+      `;
+      })
+      .catch((err) => {
+        console.error(err);
+        card.innerHTML = `
+        <div class="bg-error px-4 py-2 text-error-content">Failed to load ${repo}</div>
+        <div class="p-4 text-sm">Check the repository URL or API rate limit.</div>
+      `;
+      });
+  }
+</script>
