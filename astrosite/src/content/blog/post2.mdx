@@ -1,0 +1,423 @@
+---
+title: "Cutom Engine Devlog 1 | Umbra | ECS"
+description: "How My custom engine integrates ECS"
+pubDate: "Dec 10 2025"
+heroImage: "/baseLogo.jpg"
+tags: ["game-engine", "umbra"]
+---
+
+# Building a Modern ECS for UMBRA Engine
+
+_A deep dive into the Entity Component System powering our 2D game engine_
+
+---
+
+## What is ECS?
+
+Entity Component System (ECS) is an architectural pattern that favors **composition over inheritance**. Instead of deep class hierarchies, game objects are built by combining small, reusable data chunks.
+
+```mermaid
+graph LR
+    subgraph Traditional OOP
+        A[GameObject] --> B[Character]
+        B --> C[Player]
+        B --> D[Enemy]
+        A --> E[Projectile]
+    end
+```
+
+```mermaid
+graph LR
+    subgraph ECS Composition
+        Entity1[Entity 42] --- T1[Transform]
+        Entity1 --- S1[Sprite]
+        Entity1 --- P1[PhysicsBody]
+        Entity1 --- H1[Health]
+
+        Entity2[Entity 43] --- T2[Transform]
+        Entity2 --- S2[Sprite]
+        Entity2 --- AI[AIController]
+    end
+```
+
+The three pillars:
+
+- **Entities** - Just IDs (integers), no data or behavior
+- **Components** - Pure data containers (no logic)
+- **Systems** - Logic that operates on entities with specific component combinations
+
+---
+
+## Why ECS? The Advantages
+
+### 1. Cache-Friendly Memory Layout
+
+Traditional OOP scatters data across the heap. ECS packs components contiguously:
+
+```
+Traditional:        ECS (Sparse Set):
+[Player1]           Transform[] = [T1, T2, T3, T4, T5...]  <- Cache line friendly!
+  [Transform]       Sprite[]    = [S1, S2, S3, S4, S5...]
+  [Sprite]          Physics[]   = [P1, P2, P3...]
+  [Physics]
+[Player2]
+  [Transform]       Iteration = Sequential memory access = Fast!
+  [Sprite]
+  ...
+```
+
+### 2. Flexibility Through Composition
+
+Need a moving platform? Just combine:
+
+```cpp
+world->AddComponent<TransformComponent>(entity, position, size);
+world->AddComponent<PhysicsBodyComponent>(entity, mass, velocity);
+// No new class needed!
+```
+
+### 3. Decoupled Systems
+
+Systems are independent - add physics without touching rendering:
+
+```mermaid
+graph TB
+    subgraph Systems
+        RS[RenderSystem]
+        PS[PhysicsSystem]
+        CS[CollisionSystem]
+    end
+
+    subgraph Components
+        T[Transform]
+        S[Sprite]
+        PB[PhysicsBody]
+        C[Collider]
+    end
+
+    RS --> T
+    RS --> S
+    PS --> T
+    PS --> PB
+    CS --> T
+    CS --> C
+    CS --> PB
+```
+
+### 4. Easy Serialization
+
+Components are plain data - trivial to save/load:
+
+```cpp
+struct TransformComponent : Component {
+    Math::Vector2f Position;
+    Math::Vector2f Size;
+    float Angle = 0;
+    // Just data, easily serializable
+};
+```
+
+---
+
+## UMBRA's ECS Implementation
+
+### Architecture Overview
+
+```mermaid
+graph TB
+    subgraph ECSRegister
+        EM[EntityManager]
+        CM[ComponentManager]
+        SM[SystemMap]
+    end
+
+    EM --> |Creates/Destroys| E[EntityID]
+    CM --> |Stores| CA[ComponentArray&lt;T&gt;]
+    CA --> |Sparse Set| Dense[Dense Array]
+    CA --> |Index Map| Sparse[Sparse Array]
+
+    SM --> |Phases| P1[FrameStart]
+    SM --> P2[Simulation]
+    SM --> P3[PreRender]
+    SM --> P4[Render]
+    SM --> P5[FrameEnd]
+```
+
+### Entities: Just Numbers
+
+Entities are lightweight identifiers - nothing more than a `uint64`:
+
+```cpp
+using EntityID = uint64;
+
+class EntityManager {
+    BitField<MAX_ENTITY> mEntityAliveFlags;  // Tracks which IDs are alive
+    Queue<EntityID> mFreeIds;                // Recycle freed IDs
+    EntityID mNextEntityID = 0;
+
+public:
+    EntityID CreateEntity() {
+        EntityID id;
+        if (!mFreeIds.empty()) {
+            id = mFreeIds.front();    // Reuse old ID
+            mFreeIds.pop();
+        } else {
+            id = mNextEntityID++;     // Or allocate new
+        }
+        mEntityAliveFlags.set(id, true);
+        EntitiesAdded.emplace(id);    // Defer processing
+        return id;
+    }
+};
+```
+
+Key insight: **Deferred operations**. Destroying an entity just marks it for later removal - actual deletion happens during cleanup to avoid iterator invalidation.
+
+### Component Storage: Sparse Sets
+
+The heart of our performance story. Components are stored in **Sparse Sets** - a data structure optimized for:
+
+- O(1) insertion
+- O(1) deletion
+- O(1) lookup
+- Cache-friendly iteration
+
+```mermaid
+graph LR
+    subgraph "Sparse Array (indexed by EntityID)"
+        S0["[0]: 2"]
+        S1["[1]: -"]
+        S2["[2]: 0"]
+        S3["[3]: 1"]
+        S4["[4]: -"]
+    end
+
+    subgraph "Dense Array (packed components)"
+        D0["[0]: Transform{pos:10,20}"]
+        D1["[1]: Transform{pos:50,60}"]
+        D2["[2]: Transform{pos:30,40}"]
+    end
+
+    subgraph "Dense Entities"
+        DE0["[0]: Entity 2"]
+        DE1["[1]: Entity 3"]
+        DE2["[2]: Entity 0"]
+    end
+
+    S0 --> D2
+    S2 --> D0
+    S3 --> D1
+```
+
+```cpp
+template <typename T>
+class ComponentArray : public IBaseComponentArray {
+    Vector<T> mDense;              // Packed component data
+    Vector<EntityID> mDenseEntities;
+    Vector<size_t> mSparse;        // EntityID -> dense index
+
+public:
+    void Insert(EntityID _entity, T _component) {
+        if (_entity >= mSparse.size()) {
+            mSparse.resize(_entity + 1, INVALID_INDEX);
+        }
+        size_t denseIndex = mDense.size();
+        mSparse[_entity] = denseIndex;
+        mDense.emplace_back(std::move(_component));
+        mDenseEntities.emplace_back(_entity);
+    }
+
+    // O(1) removal via swap-with-last
+    bool Remove(EntityID _entity) {
+        size_t removedIndex = mSparse[_entity];
+        size_t lastIndex = mDense.size() - 1;
+
+        if (removedIndex != lastIndex) {
+            // Swap last element into removed slot
+            mDense[removedIndex] = std::move(mDense[lastIndex]);
+            mDenseEntities[removedIndex] = mDenseEntities[lastIndex];
+            mSparse[mDenseEntities[removedIndex]] = removedIndex;
+        }
+
+        mDense.pop_back();
+        mDenseEntities.pop_back();
+        mSparse[_entity] = INVALID_INDEX;
+        return true;
+    }
+
+    T& Get(EntityID _entity) {
+        return mDense[mSparse[_entity]];
+    }
+};
+```
+
+### Component Signatures: Bitsets
+
+Each entity has a **signature** - a bitset indicating which components it has:
+
+```cpp
+using ComponentMask = BitField<MAX_COMPONENTS>;  // std::bitset<64>
+
+// Generate unique ID per component type at compile time
+template <typename T>
+inline static ComponentID GetID() {
+    static ComponentID typeID{getUniqueComponentID()};
+    return typeID;
+}
+
+// Create a signature from component types
+template <typename Component, typename... Rest>
+ComponentMask CreateSignature() {
+    ComponentMask signature;
+    signature.set(ComponentIDHelper::GetID<Component>());
+    if constexpr (sizeof...(Rest) > 0) {
+        signature |= CreateSignature<Rest...>();
+    }
+    return signature;
+}
+```
+
+Matching is a simple bitwise AND:
+
+```cpp
+// Does entity have all components required by system?
+bool matches = (systemSignature & entitySignature) == systemSignature;
+```
+
+### Systems & Views
+
+Systems define which components they need through a **View**:
+
+```cpp
+class RenderSystem : public System {
+public:
+    RenderSystem(IRenderDevice* _device)
+        : System(std::make_unique<ECView<TransformComponent, SpriteComponent>>())
+    {
+        mRenderDevice = _device;
+    }
+
+    void Update() override {
+        // Iterate only entities with Transform AND Sprite
+        for (EntityID entity : mView->mEntities) {
+            auto* transform = mView->ecsRegister->GetComponent<TransformComponent>(entity);
+            auto* sprite = mView->ecsRegister->GetComponent<SpriteComponent>(entity);
+
+            // Render logic...
+        }
+    }
+};
+```
+
+### System Execution Phases
+
+Systems are organized into phases for deterministic execution order:
+
+```mermaid
+graph LR
+    FS[FrameStart] --> SIM[Simulation] --> PR[PreRender] --> R[Render] --> FE[FrameEnd]
+
+    FS --- |"Input"| I[InputSystem]
+    SIM --- |"Physics"| P[PhysicsSystem]
+    SIM --- |"AI"| AI[AISystem]
+    PR --- |"Culling"| C[CullSystem]
+    R --- |"Draw"| RS[RenderSystem]
+    FE --- |"Cleanup"| CL[LifeTimeSystem]
+```
+
+```cpp
+enum class ESystemPhase {
+    FrameStart,    // Collect input
+    Simulation,    // Physics, AI, gameplay
+    PreRender,     // Frustum culling, LOD
+    Render,        // Draw calls
+    FrameEnd       // Cleanup, lifetime management
+};
+
+// Priority within phase (lower = earlier)
+world->AddSystem(ESystemPhase::Simulation, 10, physicsSystem);
+world->AddSystem(ESystemPhase::Simulation, 20, collisionSystem);
+world->AddSystem(ESystemPhase::Render, 0, renderSystem);
+```
+
+---
+
+## Real-World Usage Example
+
+```cpp
+class GameScene : public Scene {
+    void Initialize() override {
+        World* world = GetWorld();
+
+        // Create player entity
+        EntityID player = world->CreateEntity();
+
+        world->AddComponent<TransformComponent>(player,
+            Math::Vector2f(400, 300),    // Position
+            Math::Vector2f(64, 64),      // Size
+            0.0f,                        // Angle
+            Math::Vector2f(0.5f, 0.5f)   // Pivot
+        );
+
+        world->AddComponent<SpriteComponent>(player,
+            AssetManager::Get().LoadTexture("player.png"),
+            10,                          // Z-order
+            Color::White
+        );
+
+        world->AddComponent<PhysicsBodyComponent>(player,
+            1.0f,                        // Mass
+            Math::Vector2f(0, 0)         // Initial velocity
+        );
+
+        world->AddTag(player, "Player");
+
+        // Add custom input system
+        auto inputSystem = std::make_shared<PlayerInputSystem>();
+        world->AddSystem(ESystemPhase::FrameStart, 0, inputSystem);
+    }
+
+    void OnUpdate(float _dt) override {
+        // Query entities by tag
+        Vector<EntityID> enemies = GetWorld()->FindEntitiesByTag("Enemy");
+
+        for (EntityID enemy : enemies) {
+            auto* transform = GetWorld()->GetComponent<TransformComponent>(enemy);
+            // Game logic...
+        }
+    }
+};
+```
+
+---
+
+## Performance Characteristics
+
+| Operation          | Complexity     | Notes                      |
+| ------------------ | -------------- | -------------------------- |
+| Create Entity      | O(1)           | ID recycling via queue     |
+| Destroy Entity     | O(1)\*         | Deferred until cleanup     |
+| Add Component      | O(1) amortized | Sparse set insert          |
+| Remove Component   | O(1)           | Swap-with-last             |
+| Get Component      | O(1)           | Direct index lookup        |
+| Iterate Components | O(n)           | Cache-friendly dense array |
+| System Matching    | O(1)           | Bitwise AND                |
+| Find by Tag        | O(1) avg       | Hash map lookup            |
+
+\*Actual removal is O(k) where k = number of components on entity
+
+---
+
+## Lessons Learned
+
+1. **Deferred operations are essential** - Modifying entities during iteration causes crashes. Queue changes for cleanup phase.
+
+2. **Sparse sets beat maps** - We initially used `std::unordered_map` for components. Switching to sparse sets gave 3-4x iteration speedup.
+
+3. **64 components is enough** - Using `std::bitset<64>` keeps signatures in a single cache line.
+
+4. **Tags need their own index** - Linear search for named entities is slow. A secondary `map<string, set<EntityID>>` makes `FindByTag` instant.
+
+5. **Views should cache** - Recalculating which entities match each frame is wasteful. Views maintain a set that updates incrementally.
+
+---

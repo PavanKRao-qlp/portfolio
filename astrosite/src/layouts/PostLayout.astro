@@ -1,6 +1,7 @@
 ---
 import { type BlogSchema } from "../content/config";
 import BaseLayout from "./BaseLayout.astro";
+import Mermaid from "@components/Mermaid.astro";
 import dayjs from "dayjs";
 import localizedFormat from "dayjs/plugin/localizedFormat";
 
@@ -67,6 +68,7 @@ import { Image } from "astro:assets";
       }
       <div class="divider my-2"></div>
       <slot />
+      <Mermaid />
     </article>
   </main>
 </BaseLayout>

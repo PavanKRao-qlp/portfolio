@@ -1,0 +1,26 @@
+<script>
+  import mermaid from "mermaid";
+
+  mermaid.initialize({ startOnLoad: false, theme: "default" });
+
+  async function renderMermaidDiagrams() {
+    const preBlocks = document.querySelectorAll("pre[data-language='mermaid']");
+
+    for (const pre of preBlocks) {
+      const definition = pre.textContent.trim();
+
+      try {
+        const { svg } = await mermaid.render(
+          "mermaid-" + Math.random().toString(36).slice(2),
+          definition
+        );
+        pre.outerHTML = svg;
+      } catch (e) {
+        console.error("Mermaid render error:", e);
+      }
+    }
+  }
+
+  // astro:page-load fires after every view transition AND on initial page load
+  document.addEventListener("astro:page-load", renderMermaidDiagrams);
+</script>
