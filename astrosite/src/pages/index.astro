@@ -9,7 +9,7 @@ import createSlug from "../lib/createSlug";
 const about = await getEntryBySlug("about", "about");
 const projects = await getCollection("projects");
 const posts = (await getCollection("blog")).sort(
-  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
 );
 // filter pinned projects
 const pinnedProjects = projects
@@ -17,7 +17,9 @@ const pinnedProjects = projects
   .sort((a, b) => b.data.priority - a.data.priority);
 
 const { Content: AboutMe } = await about.render();
-const last_posts = posts.slice(0, 3);
+const pinnedPosts = posts.filter((p) => p.data.pinned);
+const regularPosts = posts.filter((p) => !p.data.pinned);
+const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 3);
 ---
 
 <BaseLayout sideBarActiveItemID="home">

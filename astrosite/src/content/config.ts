@@ -31,6 +31,7 @@ const blogSchema = z.object({
     tags: z.array(z.string()).refine(items => new Set(items).size === items.length, {
         message: 'tags must be unique',
     }).optional(),
+    pinned: z.boolean().default(false).optional(),
 });
 export type BlogSchema = z.infer<typeof blogSchema>;
 const blogCollection = defineCollection({ schema: blogSchema });

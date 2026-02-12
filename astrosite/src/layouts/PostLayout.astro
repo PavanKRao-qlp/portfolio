@@ -16,6 +16,7 @@ const {
   coverImage,
   badge,
   tags = [],
+  pinned,
 } = Astro.props;
 dayjs.extend(localizedFormat);
 const displayDate = dayjs(pubDate).format("ll");

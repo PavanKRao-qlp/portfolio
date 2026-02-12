@@ -1,17 +1,15 @@
 ---
-title: "State Tree based AI | Unreal"
+title: "Unreal RPG Devolog Part 1 - State Tree based AI | Unreal"
 description: "How I use state tree for my games combat loop"
 pubDate: "Jan 4 2026"
-heroImage: "/baseLogo.jpg"
-tags: ["Unreal", "AI"]
+heroImage: "/statetree.png"
+tags: ["Unreal", "AI" , "DungeonRPG"]
+pinned: true
 ---
----
-title: "How I Built the Combat & AI Systems"
-date: "2026-02-03"
-author: "Solo Dev"
-tags: ["unreal-engine", "ai", "combat", "gas", "state-tree", "devlog"]
-description: "A look at how DungeonRPG handles melee combat and coordinates multiple AI enemies using State Trees, utility scoring, and a token-based attack system."
----
+
+
+import { Image } from "astro:assets";
+import myImage from "../../assets/statetree.png";
 
 # How I Built the Combat & AI Systems
 
@@ -166,6 +164,8 @@ Enemies don't just stand around waiting for tokens. Two tasks keep them moving:
 ## The Full Picture
 
 Here's what happens when an enemy decides to attack:
+
+<Image src={myImage} alt="State Tree" />
 
 ```
 1. AbilityUtilityScorer looks at all options

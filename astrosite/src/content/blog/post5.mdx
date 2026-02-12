@@ -1,0 +1,199 @@
+---
+title: "Cutom Engine Devlog 3 | Umbra | Physics Part 2 Collision Detection"
+description: " How to check overlapping bodies : SAT and contact generation"
+pubDate: "Jul 04 2025"
+heroImage: "/physics2d_2.png"
+tags: ["game-engine", "umbra", "physics"]
+---
+
+
+## Part 2 — Collision Detection: SAT, Circles, and Contact Points
+
+Integration tells us where bodies *want* to go. Collision detection tells us where they *can't*. UMBRA handles three collision pairs: circle-circle, circle-OBB, and OBB-OBB.
+
+### The Dispatch Table
+
+`CollisionQuery::CheckCollision` routes to the right algorithm based on shape types:
+
+```
+Circle vs Circle  →  TestCircleCircle
+Circle vs Box     →  TestCircleVsOBB  (normal flipped to maintain A→B convention)
+Box    vs Circle  →  TestCircleVsOBB  (argument order swapped)
+Box    vs Box     →  TestBoxVsBoxSAT  →  TestPolygonVsPolygonOverlapSAT
+```
+
+Every collision function fills a `CollisionDef` with:
+- **contactNormal**: unit vector pointing from body A toward body B
+- **penetration**: overlap depth along that normal
+- **contacts[]**: one or more contact points with individual penetration depths
+
+The A→B normal convention is enforced everywhere — when `TestCircleVsOBB` returns a normal pointing the wrong way, `CheckCollision` flips it. This consistency is critical for the solver in Part 3.
+
+### Circle vs Circle
+
+The simplest test. Two circles overlap when the distance between their centers is less than the sum of their radii:
+
+```cpp
+float distSq = (posB - posA).SquareMagnitude();
+float radiiSum = radiusA + radiusB;
+if (distSq > radiiSum * radiiSum) return false;  // early-out with squared distance
+```
+
+The contact normal is the normalized displacement vector between centers, and the contact point sits on A's surface toward B:
+
+```cpp
+contactNormal = displacement / dist;
+contactPoint = posA + contactNormal * radiusA;
+penetration = radiiSum - dist;
+```
+
+The degenerate case (coincident centers) uses an arbitrary axis `(1, 0)` to avoid division by zero.
+
+### Circle vs OBB (Oriented Bounding Box)
+
+This uses the **closest-point-on-OBB-edge** approach:
+
+1. Find the point on the OBB boundary closest to the circle center (using `GetClosestPointOnOrientedBoundEdge`, which projects the circle center into the OBB's local space, clamps to the half-extents, and transforms back)
+2. If the distance from that point to the circle center is less than the radius, they overlap
+3. The contact point *is* that closest point on the OBB surface
+
+```cpp
+Vector2f pointOnOBB = GetClosestPointOnOrientedBoundEdge(bounds, angle, circlePos);
+float distance = (circlePos - pointOnOBB).Magnitude();
+if (distance > radius) return false;
+
+penetration = radius - distance;
+contactNormal = (circlePos - pointOnOBB) / distance;
+contactPoint = pointOnOBB;
+```
+
+This handles all cases: circle touching a face, an edge, or a corner of the box.
+
+### Box vs Box: The Separating Axis Theorem (SAT)
+
+SAT is the workhorse of convex polygon collision. The theorem states:
+
+> **Two convex shapes are separated if and only if there exists an axis along which their projections do not overlap.**
+
+For two convex polygons, the only candidate separating axes are the **edge normals** of both shapes. For two boxes (4 edges each), that's 8 candidate axes — though parallel edges reduce this to 4 unique directions.
+
+#### Step 1: Build World-Space Polygons
+
+Each box is converted to 4 world-space vertices by rotating the local half-extents by the body's angle:
+
+```cpp
+vertices.emplace_back(pos + Vector2f( halfW, -halfH).GetRotated(angle));
+vertices.emplace_back(pos + Vector2f( halfW,  halfH).GetRotated(angle));
+vertices.emplace_back(pos + Vector2f(-halfW,  halfH).GetRotated(angle));
+vertices.emplace_back(pos + Vector2f(-halfW, -halfH).GetRotated(angle));
+```
+
+#### Step 2: Test All Axes
+
+For each candidate axis (edge normals from both polygons), project all vertices of both shapes onto that axis and check for overlap:
+
+```cpp
+for (Vector2f axis : allAxes) {
+    Projection projA = shapeA.GetProjectionOntoAxis(axis);
+    Projection projB = shapeB.GetProjectionOntoAxis(axis);
+
+    // Gap found — shapes are separated
+    if (projA.Min > projB.Max || projA.Max < projB.Min) {
+        return false;
+    }
+
+    // Track axis of minimum overlap (MTV direction)
+    float overlap = min(projA.Max, projB.Max) - max(projA.Min, projB.Min);
+    if (overlap < minOverlap) {
+        minOverlap = overlap;
+        minAxis = axis;
+    }
+}
+```
+
+If no separating axis is found, the shapes are colliding. The axis with the **smallest overlap** is the **Minimum Translation Vector (MTV)** — the cheapest direction to push the shapes apart.
+
+#### Step 3: Orient the Normal
+
+The MTV axis might point from B→A. We fix this by checking against the center-to-center vector:
+
+```cpp
+Vector2f AB = shapeB.GetCenter() - shapeA.GetCenter();
+if (Dot(AB, minAxis) < 0) {
+    minAxis = -minAxis;
+}
+```
+
+Now `contactNormal` reliably points from A toward B.
+
+### Contact Point Generation: Sutherland-Hodgman Clipping
+
+SAT gives us the collision normal and penetration depth, but the solver needs *contact points* — the actual spots where the shapes touch. UMBRA uses **Sutherland-Hodgman polygon clipping** to find them.
+
+#### Finding the Best Edges
+
+For each polygon, we find the vertex that projects farthest along the contact normal (the "support point"). The **best edge** is the edge adjacent to that vertex that is most perpendicular to the contact normal:
+
+```cpp
+// For each neighbor edge of the support vertex,
+// pick the one whose direction is most perpendicular to the normal
+float prevProj = Dot(prevEdgeDir, normal);
+float nextProj = Dot(nextEdgeDir, normal);
+if (abs(prevProj) <= abs(nextProj))
+    bestEdge = {prevVertex, supportVertex};
+else
+    bestEdge = {supportVertex, nextVertex};
+```
+
+#### Reference vs Incident Edge
+
+The edge that is *more perpendicular* to the contact normal becomes the **reference edge** (the clipping boundary). The other is the **incident edge** (to be clipped):
+
+```cpp
+float e1Dot = abs(Dot(bestEdgeA_dir, normal));
+float e2Dot = abs(Dot(bestEdgeB_dir, normal));
+if (e1Dot <= e2Dot) {
+    referenceEdge = bestEdgeA;  // more perpendicular
+    incidentEdge = bestEdgeB;
+} else {
+    referenceEdge = bestEdgeB;
+    incidentEdge = bestEdgeA;
+}
+```
+
+#### Clipping
+
+The incident edge is clipped against the two side planes of the reference edge. Each clip trims the edge to the region that lies within the reference face's extent:
+
+```cpp
+// Clip against left side plane
+Clip(refEdgeDir, incidentEdge, Dot(refEdgeDir, refEdge.first));
+// Clip against right side plane
+Clip(-refEdgeDir, incidentEdge, Dot(-refEdgeDir, refEdge.second));
+```
+
+The `Clip` function implements Sutherland-Hodgman for a single plane: it keeps points on the positive side and interpolates new points where the edge crosses the plane:
+
+```cpp
+if (dist1 * dist2 < 0.0f) {
+    float t = dist1 / (dist1 - dist2);
+    newPoint = edge.first + t * (edge.second - edge.first);
+}
+```
+
+#### Final Filter
+
+After clipping, any remaining points that are behind the reference face (negative depth) are valid contact points:
+
+```cpp
+float depth = Dot(refNormal, point) - Dot(refNormal, refEdge.first);
+if (depth <= 0.0f) {
+    contact.contactPoint = point;
+    contact.penetration = -depth;
+    contacts.push_back(contact);
+}
+```
+
+This typically yields 1 contact point for vertex-face collisions and 2 contact points for face-face (edge-edge in 2D) collisions. Having two contact points is crucial for stable stacking — a single point can't resist rotation.
+
+---

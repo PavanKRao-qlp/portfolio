@@ -1,0 +1,296 @@
+---
+title: "Cutom Engine Devlog 5 | Umbra |  Physics Part 4 AABB Tree Broadphase and Sleep Optimization"
+description: " How to optimize O^N checks, and rdeuce load of physics step : Dynamic AABB Tree and sleeping non moving bodies"
+pubDate: "Jan 29 2026"
+heroImage: "/physics2d_4.png"
+tags: ["game-engine", "umbra", "physics"]
+pinned: true
+---
+
+## Part 4 — Broadphase, Dynamic AABB Tree, and Sleeping
+
+With potentially hundreds of bodies, testing every pair for collisions is O(n²) — unacceptable. The broadphase and sleeping systems exist to make the engine scale.
+
+### The Broadphase Problem
+
+If you have 200 bodies, that's 19,900 potential collision pairs. Most of these are nowhere near each other. The **broadphase** cheaply eliminates pairs that can't possibly collide, leaving only a handful for the expensive narrow-phase (SAT, clipping) from Part 2.
+
+### Dynamic AABB Tree
+
+UMBRA uses a **Dynamic AABB Tree** — the same data structure Box2D uses. It's a binary tree where:
+
+- **Leaf nodes** store a fattened AABB for each physics body
+- **Internal nodes** store the union (bounding AABB) of their children
+- The tree is kept balanced via AVL-style rotations
+
+#### Why Not a Grid?
+
+Uniform grids are simpler but struggle with varying body sizes and large worlds. Quadtrees handle spatial variance but are expensive to rebuild. The dynamic AABB tree is *incrementally maintained* — bodies are inserted, removed, and moved without rebuilding, making it ideal for real-time simulation.
+
+#### Fat AABBs: Avoiding Constant Rebuilds
+
+A body's tight AABB changes every frame as it moves. Rebuilding the tree every frame would negate its benefits. The solution: **fat AABBs**.
+
+When a body is inserted, its AABB is *fattened* — expanded by a uniform margin plus a velocity-based prediction:
+
+```cpp
+Bounds2D FattenAABB(const Bounds2D& aabb, const Vector2f& displacement) const {
+    Vector2f margin(fattenMargin, fattenMargin);  // uniform expansion (default 15px)
+    Vector2f newMin = aabb.Min() - margin;
+    Vector2f newMax = aabb.Max() + margin;
+
+    // Extend in direction of movement
+    Vector2f d = displacement * displacementMultiplier;  // default 2x
+    if (d.x < 0) newMin.x += d.x;
+    else          newMax.x += d.x;
+    if (d.y < 0) newMin.y += d.y;
+    else          newMax.y += d.y;
+
+    return Bounds2D(center, size);
+}
+```
+
+During `UpdateBroadphaseProxies`, if a body's tight AABB still fits inside its fat AABB, *the tree is not touched*. Only when a body moves enough to escape its fat envelope is the proxy re-inserted:
+
+```cpp
+bool MoveProxy(int32 proxyId, const Bounds2D& newAabb, const Vector2f& displacement) {
+    // Still fits? Skip.
+    if (nodes[proxyId].Aabb.Contains(newAabb)) return false;
+
+    RemoveLeaf(proxyId);
+    nodes[proxyId].Aabb = FattenAABB(newAabb, displacement);
+    InsertLeaf(proxyId);
+    return true;
+}
+```
+
+The displacement multiplier (default 2x) means the fat AABB extends in the direction the body is heading, so a smoothly-moving body might not trigger a tree update for many frames.
+
+#### Insertion: Surface Area Heuristic (SAH)
+
+When inserting a leaf, we need to find the best sibling — the existing node that minimizes the total surface area increase in the tree. Lower total SA means tighter bounding volumes and fewer false positives during queries.
+
+The algorithm uses a **cost-based tree traversal** (Box2D style):
+
+```cpp
+// For each candidate sibling, compute:
+//   totalCost = SA(union(candidate, newLeaf)) + inheritedCost
+
+// inheritedCost = sum of SA increases at all ancestors
+// Lower bound for any descendant = SA(newLeaf) + inheritedCost
+
+// Prune: if lowerBound >= bestCost, skip this subtree entirely
+```
+
+This is effectively a branch-and-bound search that finds the optimal sibling in O(log n) for reasonably balanced trees, compared to O(n) for a naive search.
+
+#### AVL Balancing
+
+After insertion or removal, the tree walks upward, fixing heights and AABBs, and applying AVL-style rotations when the balance factor exceeds 1:
+
+```cpp
+int32 balance = nodes[rightId].Height - nodes[leftId].Height;
+
+if (balance > 1) {
+    // Right-heavy: rotate right child up
+    // Pick the taller grandchild to remain at the higher level
+    // to minimize resulting height
+}
+if (balance < -1) {
+    // Left-heavy: rotate left child up
+}
+```
+
+The rotation picks the *taller* grandchild to stay higher in the tree, minimizing the resulting maximum height. This keeps the tree at O(log n) depth, guaranteeing O(log n) query performance.
+
+#### Querying the Tree
+
+Broadphase detection queries the tree for each body's fat AABB:
+
+```cpp
+void BroadphaseDetection() {
+    for (each active body i) {
+        const Bounds2D& fatAABB = tree.GetFatAABB(bodies[i].TreeProxyId);
+
+        tree.Query(fatAABB, [&](int32 proxyId) {
+            uint32 otherIndex = tree.GetBodyIndex(proxyId);
+
+            // Dedup: only keep pairs where i < other
+            if (otherIndex <= i) return;
+
+            // Skip if both sleeping
+            if (bodies[i].bIsSleeping && bodies[otherIndex].bIsSleeping) return;
+
+            overlappingPairs.emplace_back(handleA, handleB);
+        });
+    }
+}
+```
+
+The tree query is stack-based (no recursion, no allocation):
+
+```cpp
+template <typename Func>
+void Query(const Bounds2D& aabb, Func&& callback) const {
+    Stack<int32> stack;
+    stack.push(root);
+
+    while (!stack.empty()) {
+        int32 nodeId = stack.top(); stack.pop();
+        const auto& node = nodes[nodeId];
+
+        if (node.Aabb.Intersects(aabb)) {
+            if (node.IsLeaf())
+                callback(nodeId);
+            else {
+                stack.push(node.Left);
+                stack.push(node.Right);
+            }
+        }
+    }
+}
+```
+
+Branches whose AABB doesn't intersect the query are pruned entirely — in practice, this visits O(log n + k) nodes where k is the number of actual overlaps.
+
+### Node Management: Pool Allocator
+
+The tree uses a **free-list pool** for node allocation, avoiding heap allocation during gameplay:
+
+```cpp
+// Pre-allocate nodes with a linked free list
+for (uint32 i = 0; i < capacity - 1; ++i) {
+    nodes[i].NextFree = i + 1;
+}
+
+// Allocate: pop from free list
+int32 AllocateNode() {
+    if (freeList == NullNode) { /* double capacity, rebuild free list */ }
+    int32 nodeId = freeList;
+    freeList = nodes[nodeId].NextFree;
+    return nodeId;
+}
+
+// Free: push to free list
+void FreeNode(int32 nodeId) {
+    nodes[nodeId].NextFree = freeList;
+    freeList = nodeId;
+}
+```
+
+When the pool runs out, it doubles in size — amortized O(1) allocation with zero per-frame heap allocations during steady state.
+
+### Body Sleeping
+
+Once a stack of boxes settles, there's no reason to keep simulating them. The **sleeping system** detects bodies at rest and skips them entirely.
+
+#### Sleep Criteria
+
+A body can sleep when both its linear and angular velocities are below thresholds for a sustained period:
+
+```cpp
+bool shouldSleep = body.Velocity.SquareMagnitude() < sleepLinearThreshold²
+                && abs(body.AngularVelocity) < sleepAngularThreshold;
+
+if (shouldSleep) {
+    body.SleepTimer += dt;
+    if (body.SleepTimer >= sleepTimeThreshold) {  // default 0.5 seconds
+        body.Sleep();
+    }
+} else {
+    body.SleepTimer = 0.0f;  // reset timer if moving
+}
+```
+
+The time threshold (0.5s default) prevents premature sleeping — a ball at the apex of its arc has zero velocity momentarily, but the timer resets as soon as it starts falling again.
+
+#### What Happens When a Body Sleeps
+
+```cpp
+void Sleep() {
+    bIsSleeping = true;
+    Velocity = Vector2f(0, 0);
+    AngularVelocity = 0.0f;
+    ForceAccumulated = Vector2f(0, 0);
+    TorqueAccumulated = 0.0f;
+}
+```
+
+Velocity and forces are zeroed — the body is frozen in place. Sleeping bodies are skipped by:
+- Integration (forces, velocities)
+- Damping
+- But **not** by broadphase (their proxy stays in the tree)
+
+#### Wake-Up: Contact Propagation
+
+When an awake body collides with a sleeping body, the sleeper wakes up:
+
+```cpp
+for (each collision) {
+    if (bodyA.bIsSleeping && !bodyB.bIsSleeping && !bodyB.IsStatic()) {
+        bodyA.Wake();  // resets bIsSleeping and SleepTimer
+    }
+    if (bodyB.bIsSleeping && !bodyA.bIsSleeping && !bodyA.IsStatic()) {
+        bodyB.Wake();
+    }
+}
+```
+
+Only dynamic awake bodies can wake sleepers — static bodies can't (a box resting on the floor shouldn't wake every frame). This creates natural cascading wake-ups: throw a ball at a stack of sleeping boxes, and only the impacted boxes wake up, which wake the ones above them, and so on.
+
+Force application also triggers wake-ups:
+
+```cpp
+void ApplyForce(BodyHandle handle, Vector2f force) {
+    if (force.SquareMagnitude() > 0.0f) {
+        body->Wake();
+    }
+    body->ForceAccumulated += force;
+}
+```
+
+#### Sleeping Bodies in the Solver
+
+During constraint solving, sleeping bodies are treated as immovable:
+
+```cpp
+float invMassA = bodyA.bIsSleeping ? 0.0f : bodyA.InverseMass;
+float invInertiaA = bodyA.bIsSleeping ? 0.0f : bodyA.InverseInertia;
+```
+
+This prevents the solver from moving sleeping bodies while still allowing them to provide correct support forces to awake bodies resting on them.
+
+#### The Per-Body Sleep Flag
+
+Bodies can opt out of sleeping with `bCanSleep = false` — useful for the player character, cameras, or anything that should always be responsive to gameplay input.
+
+### Putting It All Together
+
+Here's the full `Step()` flow with broadphase and sleeping in context:
+
+```
+ 1. IntegrateForces           (skip sleeping)
+ 2. IntegrateVelocities       (skip sleeping)
+ 3. ApplyDamping              (skip sleeping)
+ 4. ClearForceAccumulators    (all active)
+ 5. UpdateBroadphaseProxies   (move fat AABBs)
+ 6. BroadphaseDetection       (tree queries, skip sleeping pairs)
+ 7. NarrowPhaseDetection      (SAT/clipping on broadphase pairs)
+ 8. PrecomputeConstraints     (effective masses, sleeping→invMass=0)
+ 9. ResolveContacts × 8       (sequential impulse, accumulated clamping)
+10. PositionCorrection × 3    (Baumgarte-style nudge)
+11. UpdateSleepingBodies      (wake on contact, sleep timer, freeze)
+```
+
+The broadphase tree and sleeping system together mean that a scene with 500 bodies — 480 of which are resting in settled stacks — only does narrow-phase collision on the ~20 moving bodies and their immediate neighbors. The difference between O(n²) brute-force and this pipeline is often 100x or more in practice.
+
+---
+
+Watch the complete Physics System Demo : 
+<div class="w-3/4 max-w-[800px] aspect-video mx-auto">
+<iframe
+    src={`https://www.youtube.com/embed/hL-RvTfPYAc`}
+    class="w-full h-full rounded-lg"
+    allowfullscreen>
+    </iframe>
+</div>

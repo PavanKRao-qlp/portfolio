@@ -1,0 +1,255 @@
+---
+title: "Cutom Engine Devlog 2 | Umbra | Physics Part 1 Kinematic Integration"
+description: "Teaching Bodies to Move : How My custom engine handles physics, Point object kinematics"
+pubDate: "Mar 22 2025"
+heroImage: "/physics2d_1.png"
+tags: ["game-engine", "umbra" , 'physics']
+---
+## Physics In Umbra Part 1 — Kinematic Integration (Structured Notes)
+
+---
+## Part 1 — Kinematic Integration: Teaching Bodies to Move
+
+Every physics engine begins with the same question: *given the forces acting on a body right now, where will it be next frame?* Answering that question requires translating continuous, real-world physics into discrete simulation steps. Before we touch any code, let's build the mathematical foundation from first principles.
+
+---
+
+### Motion in Continuous Time: Derivatives
+
+In classical mechanics, the motion of a body is described by a hierarchy of quantities, each being the time-derivative of the one below it.
+
+**Position** `x(t)` tells us where a body is at time `t`.
+
+**Velocity** is the rate of change of position — how fast and in what direction the body moves:
+
+```
+v(t) = dx/dt
+```
+
+This is a *differential*: it describes an instantaneous relationship. At any instant, velocity is the slope of the position curve. A ball at `x = 3m` with `v = 5 m/s` will be near `x = 3.05m` one hundredth of a second later — but "near" is doing a lot of work, because velocity itself can change.
+
+**Acceleration** is the rate of change of velocity:
+
+```
+a(t) = dv/dt = d²x/dt²
+```
+
+Acceleration tells us how velocity evolves. A constant acceleration of `a = 10 m/s²` means velocity grows by 10 m/s every second. These two differential relationships — `v = dx/dt` and `a = dv/dt` — are the entire kinematic foundation. Everything else follows from deciding *how* to step forward in time.
+
+#### The Angular Equivalents
+
+Every linear quantity has a rotational counterpart:
+
+| Linear | Angular | Relationship |
+|--------|---------|-------------|
+| Position `x` | Angle `θ` | `ω = dθ/dt` |
+| Velocity `v` | Angular velocity `ω` | `α = dω/dt` |
+| Acceleration `a` | Angular acceleration `α` | `α = d²θ/dt²` |
+
+A spinning box has an angular velocity `ω` (radians per second) and an angular acceleration `α` that changes it. The math is identical — we just swap vectors for scalars (in 2D, rotation is around a single axis).
+
+---
+
+### From Differentials to Integration
+
+A physics engine doesn't have access to continuous time. It advances in discrete steps of size `dt` (UMBRA uses a fixed `dt = 0.01s` by default). The question becomes: given `v = dx/dt`, how do we compute the *new* position from the *current* state?
+
+The answer is **numerical integration** — the reverse of differentiation. We want to solve:
+
+```
+x(t + dt) = x(t) + ∫[t to t+dt] v(τ) dτ
+v(t + dt) = v(t) + ∫[t to t+dt] a(τ) dτ
+```
+
+In the continuous world, these integrals give exact results. But we can't evaluate a continuous integral in a simulation — we only know `v` and `a` at specific moments. Different approximation strategies give us different **integrators**, each with its own tradeoffs between accuracy, stability, and cost.
+
+---
+
+### Explicit Euler: The Naive Approach
+
+The simplest possible integrator assumes everything stays constant during the timestep:
+
+```
+v(t + dt) = v(t) + a(t) * dt
+x(t + dt) = x(t) + v(t) * dt
+```
+
+This is **Explicit (Forward) Euler**. It uses the *current* velocity to update position and the *current* acceleration to update velocity. It's easy to understand and implement, but it has a fundamental problem: **it's unstable**.
+
+Euler integration is first-order — the error grows proportionally to `dt`. Under stiff forces (springs, constraints), it systematically *adds* energy to the system. A ball bouncing on a spring will bounce higher each time. An orbit simulation will spiral outward. The smaller `dt` is, the slower the divergence, but it never goes away.
+
+### Semi-Implicit (Symplectic) Euler: A Critical Fix
+
+A small but powerful rearrangement changes everything:
+
+```
+v(t + dt) = v(t) + a(t) * dt       ← update velocity FIRST
+x(t + dt) = x(t) + v(t + dt) * dt  ← use the NEW velocity for position
+```
+
+The only difference from explicit Euler is the order: we update velocity first, then use *that updated velocity* to advance position. This is the **Semi-Implicit Euler** (also called Symplectic Euler), and despite being trivially different in code, its behavior is fundamentally better.
+
+Semi-implicit Euler is a **symplectic integrator** — it preserves the geometric structure of the phase space (the position-velocity relationship). In practice, this means it conserves energy *on average*. A spring oscillation will wobble slightly around the true amplitude but never blow up. An orbit will stay in a stable path indefinitely.
+
+Most real-time physics engines (Box2D, Bullet, PhysX) use some variant of symplectic integration for exactly this reason: it's cheap, it's stable, and it doesn't require complex state management.
+
+### Velocity Verlet: Second-Order Accuracy
+
+UMBRA goes one step further with **Velocity Verlet**, a second-order symplectic integrator. Where semi-implicit Euler uses only the *current* acceleration, Verlet uses the *average* of the old and new accelerations:
+
+**Velocity update:**
+```
+v(t+dt) = v(t) + 0.5 * (a(t) + a(t+dt)) * dt
+```
+
+**Position update:**
+```
+x(t+dt) = x(t) + v(t) * dt + 0.5 * a(t) * dt²
+```
+
+The extra `0.5 * a * dt²` term in the position update is a second-order correction. It's small per frame, but it matters when bodies accelerate quickly — it prevents the "spiraling" artifacts you'd see with first-order methods on orbital or spring systems. The velocity averaging produces smoother trajectories and more accurate energy conservation.
+
+The tradeoff: we need to store the previous frame's acceleration on each body so we can average it with the new one. A small memory cost for measurably better simulation quality.
+
+---
+
+### Newton's Laws: Where Forces Enter
+
+So far we've discussed *how* to step position and velocity forward, but not *what drives them*. That's where Newton's laws come in.
+
+**Newton's Second Law** states:
+
+```
+F = m * a    →    a = F / m
+```
+
+Force (`F`) causes acceleration (`a`), scaled by mass (`m`). A 10 N force on a 2 kg body produces `5 m/s²` of acceleration. The same force on a 20 kg body produces only `0.5 m/s²`. Mass is a body's resistance to linear acceleration — its **inertia**.
+
+#### The Angular Equivalent: Torque and Rotational Inertia
+
+Newton's second law has a direct rotational analog:
+
+```
+τ = I * α    →    α = τ / I
+```
+
+**Torque** (`τ`) is rotational force — it causes angular acceleration (`α`), scaled by the **moment of inertia** (`I`). Where mass resists linear acceleration, moment of inertia resists *rotational* acceleration. A long thin rod is harder to spin than a compact sphere of the same mass, because its mass is distributed farther from the pivot.
+
+For 2D shapes with uniform density, the standard formulas are:
+
+- **Circle (solid disk):** `I = ½mr²`
+- **Rectangle (solid):** `I = (1/12) * m * (w² + h²)`
+
+Getting inertia right matters — too low and boxes spin like tops, too high and they feel "frozen" rotationally. UMBRA auto-calculates inertia from the body's shape when the user doesn't provide a value.
+
+---
+
+### Putting It All Together: The Integration Pipeline
+
+Each call to `PhysicsService::Step()` runs a strict pipeline. The first four stages handle integration:
+
+```
+1. IntegrateForces     →  forces become velocities
+2. IntegrateVelocities →  velocities become positions
+3. ApplyDamping        →  bleed off energy
+4. ClearAccumulators   →  reset for next frame
+5-11. Collision & solving (Parts 2-4)
+```
+
+Splitting integration into two phases is deliberate — it's required by the Velocity Verlet scheme.
+
+#### Phase 1: Forces → Velocities (`IntegrateForces`)
+
+This phase converts all accumulated forces into acceleration, then updates velocity using the Verlet average:
+
+```cpp
+// Newton's 2nd law: a = F * (1/m)
+Vector2f newAcceleration = body.ForceAccumulated * body.InverseMass;
+float newAngularAcceleration = body.TorqueAccumulated * body.InverseInertia;
+
+// Velocity Verlet: average old + new acceleration
+body.Velocity += (body.Acceleration + newAcceleration) * 0.5f * dt;
+body.AngularVelocity += (body.AngularAcceleration + newAngularAcceleration) * 0.5f * dt;
+
+// Store for next frame's averaging
+body.Acceleration = newAcceleration;
+body.AngularAcceleration = newAngularAcceleration;
+```
+
+Notice how the linear and angular updates are *structurally identical*. Force times inverse mass gives linear acceleration; torque times inverse inertia gives angular acceleration. The Verlet averaging applies to both.
+
+#### Phase 2: Velocities → Positions (`IntegrateVelocities`)
+
+The second phase applies the full Verlet displacement formula:
+
+```cpp
+// Verlet position: x = x + v*dt + 0.5*a*dt²
+body.Position += body.Velocity * dt + body.Acceleration * (dt*dt * 0.5f);
+body.Angle += body.AngularVelocity * dt + body.AngularAcceleration * (dt*dt * 0.5f);
+```
+
+Angles are normalized to `[0, 2π)` after integration to prevent floating-point drift over many rotations.
+
+---
+
+### Inverse Mass: The Static Body Trick
+
+Every mass and inertia value is stored inverted:
+
+```cpp
+float InverseMass;     // 0 = infinite mass (static)
+float InverseInertia;  // 0 = infinite inertia
+```
+
+This is a standard physics engine technique. Newton's law becomes `a = F * inverseMass` — a single multiplication instead of a division. But the real elegance is in how it handles static bodies: a body with `InverseMass = 0` naturally has zero acceleration from any force (`a = F * 0 = 0`), making it immovable without any special-casing. Static bodies, kinematic bodies, and sleeping bodies all flow through the same code paths — the inverse-mass simply zeros out their contributions.
+
+### Gravity as a Force
+
+Gravity isn't hardcoded as a special acceleration — it's applied as a *force* proportional to mass, fed through the same accumulator pipeline as every other force:
+
+```cpp
+if (body.bAffectedByGravity && body.InverseMass > 0) {
+    Vector2f gravityForce = Gravity / body.InverseMass;  // F = m * g
+    body.ForceAccumulated += gravityForce;
+}
+```
+
+Since the engine stores `InverseMass` (1/m), dividing gravity by inverse mass gives `m * g`. When this force reaches `IntegrateForces`, the mass cancels out: `a = (m * g) * (1/m) = g`. All objects accelerate equally under gravity regardless of mass — as Galileo demonstrated — while gravity remains in the force pipeline, making features like per-body gravity flags trivial.
+
+### Exponential Damping
+
+Real-world objects experience drag. A naive implementation (`v *= 0.99`) is frame-rate dependent — at 100fps you'd apply it 100 times per second, at 50fps only 50. UMBRA uses **exponential damping**:
+
+```cpp
+body.Velocity *= pow(damping, dt);
+body.AngularVelocity *= pow(angularDamping, dt);
+```
+
+With `damping = 0.975`, at 100fps (dt=0.01) you get `0.975^0.01 ≈ 0.99975` per frame, and at 50fps (dt=0.02) you get `0.975^0.02 ≈ 0.99949` — the rate of energy loss over *wall-clock time* is identical regardless of frame rate. Each body can override the global damping values for per-body tuning.
+
+### The Force Pipeline
+
+Forces and impulses are the two ways to affect a body's motion, and the distinction matters:
+
+```
+ApplyForce(F)           → adds F to accumulator (integrated over dt)
+ApplyForceAtPoint(F, p) → adds F + generates torque from lever arm
+ApplyTorque(τ)          → adds τ to torque accumulator
+ApplyImpulse(J)         → directly changes velocity: Δv = J * inverseMass
+ApplyImpulseAtPoint(J, p) → velocity + angular change from cross product
+```
+
+**Forces** are accumulated throughout the frame, integrated during `IntegrateForces`, then cleared. They represent continuous pushes — gravity, springs, thrusters. **Impulses** bypass the accumulator entirely and modify velocity directly. They represent instantaneous events — collision response, explosions. The collision solver in Part 3 uses impulses; gameplay systems typically use forces.
+
+`ApplyForceAtPoint` deserves special attention. When a force is applied off-center, it produces both a linear force and a **torque** proportional to the lever arm:
+
+```
+τ = r × F    (2D cross product)
+```
+
+where `r` is the vector from the body's center of mass to the application point. A force through the center produces pure translation; a force at the edge also spins the body. This is how the collision solver generates realistic rotational responses from contact impulses.simmilarly 
+
+---
+
+
+[follow the physics series](/portfolio/blog/tag/physics)
