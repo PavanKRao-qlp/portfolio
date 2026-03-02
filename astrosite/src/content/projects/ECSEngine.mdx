@@ -1,39 +1,67 @@
 ---
-title: "Umbra Engine"
-description: "ECS Based 2d Physics Engine made in C++"
+title:  "Umbra Engine"
+description: "Multithreaded ECS Based 2d Physics Engine made in C++"
 heroImage: "/umbra.jpg"
 priority: -2
 pin: true
 ---
+
 import GithubCard from "../../components/GitHubCard.astro"
 
   <p>
-    Umbra Engine is a custom C++ game engine designed for 2D games, featuring a lightweight 
-    Entity-Component-System (ECS) architecture, modular event handling, and support for 
-    real-time game mechanics.
+    Umbra Engine is a custom C++ game engine designed for 2D games, featuring a lightweight
+    Entity-Component-System (ECS) architecture, a multithreaded job system, modular service
+    layer, and full support for real-time game mechanics.
   </p>
 
+  ## Features
 
-  <h2>Features</h2>
-  <ul>
-    <li>Custom ECS framework inspired by ENTT.</li>
-    <li>Event system using <code>std::function</code> for flexible observers.</li>
-    <li>Collision and physics management for 2D gameplay.</li>
-    <li>Support for SFML integration and rendering pipeline.</li>
-    <li>Memory-safe entity management with optional smart pointers.</li>
-    <li>Finite State Machine support for game states.</li>
-    <li>Virtual file system for mounting directories or .pak files.</li>
-  </ul>
+  ### Core Architecture
+  - Custom ECS framework inspired by ENTT — bitset-based component matching, typed views, and multi-phase system execution (`FrameStart` → `Simulation` →
+  `PreRender` → `FrameEnd`)
+  - Scene graph with parent-child transform hierarchy — local/world matrix propagation via DFS each frame
+  - Scene management with async transitions and LDtk level editor integration
 
-[Read up on implementation in my devblog series ](/portfolio/blog/tag/umbra)
+  ### Multithreading & Parallelism
+  - M:N job system — fixed thread pool with work-stealing queue
+  - `ParallelFor` for data-parallel workloads (e.g. texture loading batches)
+  - Dependency chains via `SubmitAfter` — `JobHandle` / `JobCompletion` primitives with completion callbacks
+  - Primitives: `Mutex`, `SpinLock`, `ConditionVariable`, `Thread` (RAII wrapper)
 
+  ### Rendering
+  - Decoupled `RenderService` — ECS submits `RenderQuad` draw commands each frame; service handles sort, cull, batch, and flush
+  - GLSL shader support via `IShader` / `SfmlShader` + `MaterialComponent` for per-entity shaders
+  - `DebugDrawer` for lines, circles, boxes, and oriented boxes without ECS coupling
+  - Sprite-sheet animation system — `AnimationClip::FromGrid()` helper, frame-rate controlled UV writes
 
-Watch the Physics System Demo : 
-<div class="w-3/4 max-w-[800px] aspect-video mx-auto">
-<iframe
-    src={`https://www.youtube.com/embed/hL-RvTfPYAc`}
-    class="w-full h-full rounded-lg"
-    allowfullscreen>
-    </iframe>
-</div>
-<GithubCard url="https://github.com/PavanKRao-qlp/SFMLGame"/>
+  ### Asset System
+  - `AssetManager` — demand-loaded, path-keyed cache for textures, fonts, and shaders
+  - Async variants (`GetTextureAsync`, `GetFontAsync`, `GetShaderAsync`) — callbacks fire on job completion
+  - `ShaderResource` supporting fragment-only and vertex+fragment pipelines
+
+  ### Physics & Collision
+  - Rigid body simulation with broad-phase (`BruteForceBroadphaseResolver`) and narrow-phase collision
+  - `PhysicsService` + `RigidbodyHandleComponent` bridge — physics owns simulation, ECS owns data
+  - Collision callbacks via `CollisionEventResolverSystem`
+
+  ### Audio
+  - `AudioService` backed by **miniaudio** — fire-and-forget and looping playback
+  - `AudioResource` integrated into the async asset cache
+
+  ### Diagnostics & Utilities
+  - `MemoryTracker` — hooks global `new`/`delete`; per-category atomic stats with live ImGui panel
+  - `PathUtils` — header-only path manipulation (normalize, join, stem, extension, relative/absolute)
+  - `LDtkEntityComponent` — arbitrary field map from LDtk entity layer for designer-driven data
+
+  [Read up on implementation in my devblog series](/portfolio/blog/tag/umbra)
+
+  Watch the Physics System Demo:
+  <div class="w-3/4 max-w-[800px] aspect-video mx-auto">
+  <iframe
+      src={`https://www.youtube.com/embed/hL-RvTfPYAc`}
+      class="w-full h-full rounded-lg"
+      allowfullscreen>
+  </iframe>
+  </div>
+
+  <GithubCard url="https://github.com/PavanKRao-qlp/SFMLGame" />  

@@ -28,6 +28,15 @@ const {
       ogType={ogType}
     />
     {TRANSITION_API && <ViewTransitions />}
+    <script data-goatcounter="https://pavankrao-qlp.goatcounter.com/count"
+            async src="//gc.zgo.at/count.js"></script>
+    <script>
+      document.addEventListener('astro:page-load', () => {
+        if (window.goatcounter?.count) {
+          window.goatcounter.count({ path: location.pathname });
+        }
+      });
+    </script>
   </head>
   <body>
     <div class="bg-base-100 drawer lg:drawer-open">

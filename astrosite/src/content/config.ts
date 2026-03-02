@@ -45,7 +45,7 @@ const projectSchema = z.object({
     heroImage: z.string().optional(),
     coverImage: z.string().optional(),
     badge: z.string().optional(),    
-    priority: z.number().int().optional(),
+    priority: z.number().int().default(0).optional(),
     pin: z.boolean().default(false).optional(),
     type: z.enum(["work", "personal"]).default("personal")// 👈 added
 });

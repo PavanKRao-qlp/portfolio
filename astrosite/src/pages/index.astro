@@ -19,7 +19,7 @@ const pinnedProjects = projects
 const { Content: AboutMe } = await about.render();
 const pinnedPosts = posts.filter((p) => p.data.pinned);
 const regularPosts = posts.filter((p) => !p.data.pinned);
-const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 3);
+const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 5);
 ---
 
 <BaseLayout sideBarActiveItemID="home">
