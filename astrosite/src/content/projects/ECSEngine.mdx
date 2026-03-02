@@ -40,9 +40,8 @@ import GithubCard from "../../components/GitHubCard.astro"
   - `ShaderResource` supporting fragment-only and vertex+fragment pipelines
 
   ### Physics & Collision
-  - Rigid body simulation with broad-phase (`BruteForceBroadphaseResolver`) and narrow-phase collision
-  - `PhysicsService` + `RigidbodyHandleComponent` bridge — physics owns simulation, ECS owns data
-  - Collision callbacks via `CollisionEventResolverSystem`
+  -  Dynamic AABB tree for broadphase and Sequential Impulse based collision solver for narrow phase and collision event callbacks 
+  - `PhysicsService` + `ECS bridge' — ECS ↔ PhysicsService sync (creates/destroys bodies, syncs transforms)
 
   ### Audio
   - `AudioService` backed by **miniaudio** — fire-and-forget and looping playback
