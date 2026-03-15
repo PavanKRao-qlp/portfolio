@@ -26,16 +26,17 @@ const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 5);
   <section class="prose max-w-6xl p-6">
     <AboutMe />
     <div>
-      <a href={`${import.meta.env.BASE_URL}resumePavanKumarRao.pdf`}>
+      <a href={`${import.meta.env.BASE_URL}PavanKumarRao.pdf`}>
         <button class="btn btn-block btn-info">Download Resume</button>
       </a>
     </div>
   </section>
+
   <!-- renders the MDX -->
   <section>
     <div>
       <div class="text-2xl w-full font-bold mb-5 mt-10">
-        Projects I've Worked On
+        Featured Work
       </div>
     </div>
     {
@@ -107,7 +108,7 @@ const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 5);
       <div class="card card-border bg-base-100 card-sm w-96 shadow-sm">
         <div class="card-body">
           <h2 class="card-title">Email</h2>
-          <a>raopavank@gmail.com</a>
+          <a href="mailto:raopavank@gmail.com">raopavank@gmail.com</a>
         </div>
       </div>
 
