@@ -1,0 +1,334 @@
+---
+title: "Unreal RPG Devlog Part 2 - Building a Modular Quest & Dialogue System"
+description: "How my ARPG game handles quests and branching dialogue without coupling them to combat, inventory, or world systems — using a tag-driven event bus, polymorphic expressions, and a custom dialogue graph editor."
+pubDate: "APR 29 2026"
+heroImage: "/quest.png"
+tags: ["Unreal", "AI" , "DungeonRPG"]
+pinned: true
+---
+
+# Building a Modular Quest & Dialogue System
+
+When I started wiring up quests, I had a recurring fear: every new quest type would mean a new `if` branch somewhere in the combat code, the inventory code, the world code... and a year from now I'd be drowning in cross-module coupling. So before writing a single quest, I took a detour and built three modules that **don't know about each other**:
+
+- `GameEvents` — a tagged event bus
+- `QuestSystem` — listens to events, evaluates polymorphic expressions
+- `DialogueSystem` — emits events, gates choices on conditions
+
+Each one is a standalone runtime module. You could rip any of them out and drop into another UE5 project tomorrow. Here's how it all fits together.
+
+## The Problem: Cross-Module Spaghetti
+
+The naive way to do quests is something like:
+
+```cpp
+// Somewhere deep in CombatComponent.cpp
+void UCombatComponent::OnEnemyKilled(AActor* Victim) {
+    ApplyDeathEffects(Victim);
+
+    // ...and now everyone wants a piece
+    QuestManager->NotifyKill(Victim);
+    AchievementManager->NotifyKill(Victim);
+    AnalyticsManager->NotifyKill(Victim);
+    TutorialManager->NotifyKill(Victim);
+}
+```
+
+Combat now depends on quests. Quests depend on combat. Add inventory pickups, zone transitions, ability uses... and pretty soon every system imports every other system.
+
+The fix: **one event bus that nobody owns, that everyone can talk to.**
+
+## GameEvents: The Backbone
+
+`GameEvents` is the smallest of the three modules and the most important. It's literally just a `UGameInstanceSubsystem` plus a few types.
+
+### What an event looks like
+
+```cpp
+struct FGameEvent {
+    FGameplayTag EventTag;          // event.combat.kill
+    FInstancedStruct Payload;        // type-safe polymorphic data
+    FGameEventBag Bag;               // loose key→value bag
+    AActor* Instigator;
+    AActor* Target;
+    FGameplayTagContainer ContextTags;
+};
+```
+
+Two ways to attach data:
+
+1. **Typed payloads** via `FInstancedStruct`. You define `FGameEventPayload_Kill` with whatever fields, get type-safe access on the receiver: `Event.Payload.Get<FGameEventPayload_Kill>()`.
+2. **The Bag**. A loose `TMap<FName, Variant>` for situations where a typed payload would be overkill. Quests in particular love the bag — it's how the same `event.combat.kill` event can carry `"VictimType" → enemy.goblin` without anyone needing to share a header.
+
+### Subscribing
+
+```cpp
+auto* GES = UGameEventSubsystem::Get(this);
+
+// Specific event
+auto Handle = GES->Subscribe(
+    GameEventTags::Event_Combat_Kill,
+    [](const FGameEvent& E) { /* ... */ }
+);
+
+// Catch-all (this is what QuestSystem uses)
+auto AllHandle = GES->SubscribeToAny(
+    [](const FGameEvent& E) { /* ... */ }
+);
+```
+
+Plus deferred emission (`EmitEventDeferred()` queues until next tick — safe to call mid-tick) and a built-in analytics ring buffer per tag. That's the whole module. ~25 native tags, no game-specific dependencies.
+
+## QuestSystem: Expressions, Not Hardcoded Types
+
+This is where it got fun. The "obvious" quest design is to enumerate types:
+
+```cpp
+enum class EQuestObjectiveType {
+    KillEnemy,
+    CollectItem,
+    ReachLocation,
+    InteractWith,
+    // ...add a new one every time a designer asks
+};
+```
+
+I started with this. It was awful. "Kill 5 goblins" works fine. "Kill 5 goblins **inside the dungeon zone**" needs a new type. "Kill 5 goblins inside the dungeon zone **using a fire spell**" needs another. The enum grows forever.
+
+### Polymorphic expressions
+
+Instead, every objective stores a `FInstancedStruct` whose base class is `FQuestExpressionBase`:
+
+```cpp
+USTRUCT(BlueprintType)
+struct FQuestExpressionBase {
+    GENERATED_BODY()
+    virtual bool Evaluate(const FGameEvent& Event) const { return false; }
+    virtual int32 GetIncrement(const FGameEvent& Event) const { return 1; }
+};
+```
+
+The subsystem subscribes to **all** game events. For each event, it walks every active quest's objectives, calls `Expression.Evaluate(Event)`, and bumps the counter when it returns true. There's no `switch` on objective type anywhere.
+
+Built-in expressions cover the common cases:
+
+| Expression | What it does |
+|-----------|--------------|
+| `EventTag` | Event matches a tag (or a parent tag, hierarchy-aware) |
+| `CompareTag` | Resolve a tag from the event bag, compare to expected |
+| `CompareValues` | Resolve two numeric values, compare with `<`, `>=`, etc. |
+| `CompareName` | FName equality against bag/const |
+| `BagHasKey` | Event carries a specific bag key |
+| `And` / `Or` / `Not` | Composites, holding nested `FInstancedStruct`s |
+
+So "kill a goblin in the dungeon zone" is just:
+
+```
+And:
+  - CompareTag { Source=BagTag("VictimType"), Expected=enemy.goblin }
+  - CompareTag { Source=BagTag("ZoneTag"),    Expected=zone.dungeon_a }
+```
+
+Configured entirely in the editor. No new code.
+
+### Stack-based events
+
+This part bit me on the first iteration. Picking up "5 herbs" is one event with `Count=5`, not five events with `Count=1`. So `GetIncrement()` is virtual too:
+
+```cpp
+// "Collect N herbs" — increment by the stack count
+RequiredEventTag = event.inventory.item_picked_up
+LHS = Const(1)            // gate always passes
+Op  = GreaterOrEqual
+RHS = Const(1)
+Increment = BagInt("Count")  // ← bumps counter by stack size
+```
+
+Same expression type, just override what counts as +1.
+
+### The subsystem itself
+
+`UQuestSubsystem` is small because the expressions do the work:
+
+```cpp
+void UQuestSubsystem::OnGameEvent(const FGameEvent& Event) {
+    for (auto& [QuestID, Progress] : QuestProgresses) {
+        if (Progress.Status != EQuestStatus::Active) continue;
+        const auto& Def = *DefinitionMap[QuestID];
+
+        for (const FQuestObjective& Obj : Def.Objectives) {
+            if (Def.bSequentialObjectives && !IsObjectiveActive(Progress, Obj, Def))
+                continue;
+
+            const auto* Expr = Obj.Expression.GetPtr<FQuestExpressionBase>();
+            if (Expr && Expr->Evaluate(Event)) {
+                Progress.ObjectiveCounts.FindOrAdd(Obj.ObjectiveID)
+                    += Expr->GetIncrement(Event);
+                OnQuestObjectiveUpdated.Broadcast(QuestID, Obj.ObjectiveID);
+            }
+        }
+        TryCompleteQuest(Progress, Def);
+    }
+}
+```
+
+Public API: `RegisterQuestDefinition`, `StartQuest`, `AbandonQuest`, `GetQuestProgress`, plus four delegates (`OnQuestStarted`, `OnQuestObjectiveUpdated`, `OnQuestCompleted`, `OnQuestFailed`). Save/load is `GetSerializableProgress()` / `RestoreProgress()` which round-trips a `TArray<FQuestProgress>`.
+
+### Sequential vs parallel objectives
+
+Tiny quality-of-life flag on the definition. `bSequentialObjectives = true` means objective N+1 only starts ticking after objective N is done. Useful for "go here, then go here, then talk to this NPC" structure.
+
+## DialogueSystem: Same Trick, Different Domain
+
+Once expressions clicked for quests, the same idea worked for dialogue. Branching dialogue is fundamentally:
+
+> "Show this choice **if** condition X, and when picked, **do** actions Y."
+
+That's literally just expressions and actions stored as `FInstancedStruct`.
+
+### Nodes, choices, conditions, actions
+
+```cpp
+USTRUCT()
+struct FDialogueNode {
+    FGameplayTag NodeID;
+    USpeakerDataAsset* SpeakerData;     // shared across nodes
+    FText DialogueText;
+    UDialogueWave* VoiceLine;
+    TArray<FDialogueChoice> Choices;
+    FGameplayTag NextNodeID;             // for choiceless auto-advance
+    TArray<FInstancedStruct> OnEnterActions;  // FDialogueActionBase
+    bool bIsEndNode;
+    bool bNextIsReturn;                  // "continue back to choice hub"
+};
+
+USTRUCT()
+struct FDialogueChoice {
+    FText ChoiceText;
+    FGameplayTag TargetNodeID;
+    FInstancedStruct Condition;          // FDialogueConditionBase
+    TArray<FInstancedStruct> Actions;
+    bool bShowWhenUnavailable;           // grey out vs hide
+};
+```
+
+Built-in conditions: `QuestStatus`, `HasTag` (queries the player's ASC), `VisitedNode`, `DialogueCompleted`, `Variable`, plus `And`/`Or`/`Not`. Built-in actions: `EmitEvent` (fires an arbitrary `FGameEvent`), `StartQuest`, `SetVariable`, `GiveItem`.
+
+Notice what's **not** in there: hardcoded coupling. The dialogue module doesn't know about combat, doesn't know about levels, doesn't know how `GiveItem` actually executes. Actions are virtual:
+
+```cpp
+USTRUCT()
+struct FDialogueActionBase {
+    virtual void Execute(UDialogueSubsystem* Subsystem, const FActionContext& Ctx) const {}
+};
+```
+
+The "GiveItem" action is implemented in the **game module**, not the dialogue module. Same for any action that touches game-specific systems. Dialogue stays portable.
+
+### The Continue mechanic
+
+One subtlety I'm proud of: `bNextIsReturn`. Common pattern in RPGs is a hub node ("What can I do for you?") with several branches that loop back. Without special handling, returning re-shows the hub text every time, which is annoying.
+
+Instead, the player can be sent back to a hub's *choices* without replaying its text:
+
+```cpp
+// On Continue, dialogue subsystem sets ChoiceSourceNodeID = HubNodeID
+// but leaves CurrentNodeID and visible text unchanged.
+// UI listens to OnDialogueChoicesReady and refreshes only the choice panel.
+```
+
+Tiny detail, big readability win for designers.
+
+### Wiring back into GameEvents
+
+Dialogue **emits** events: `dialogue.event.started`, `dialogue.event.ended`, `dialogue.event.choice_made` — with `DialogueID`, `NodeID`, `ChoiceIndex` in the bag. Which means a quest objective can be:
+
+```
+CompareTag {
+  RequiredEventTag = dialogue.event.choice_made
+  Source = BagTag("DialogueID")
+  Expected = npc.blacksmith.intro
+}
+```
+
+"Talk to the blacksmith" objective. Zero new code. Just data.
+
+## A Custom Dialogue Graph Editor
+
+Filling out branching dialogues in a flat array of structs is *miserable*. Designers (read: me, in a designer hat) want a visual graph. So I built one.
+
+`DialogueSystemEditor` is an editor-only module using `FAssetEditorToolkit`. Double-click a `UDialogueDefinition` and you get a graph viewport.
+
+Key design choice: **choices are their own nodes**, not embedded inside dialogue nodes. The connection rules are:
+
+- `Entry → Dialogue`
+- `Dialogue → Choice (multi)` — branching point
+- `Dialogue → Dialogue (single)` — auto-advance
+- `Dialogue → End`
+- `Choice → Dialogue / End`
+
+Mixing choice and non-choice connections from the same dialogue output is rejected at the asset compile step. Every save runs the compiler:
+
+```
+graph topology  →  TArray<FDialogueNode>
+choice nodes    →  FDialogueNode::Choices
+no edge target  →  bIsEndNode = true
+Continue node   →  bNextIsReturn = true
+```
+
+The runtime never sees the graph — just the compiled flat array. Editor-only data is stripped from cooked builds. Auto-arrange is a BFS layout from the entry node, which is good enough that I haven't needed anything fancier.
+
+## How They All Talk
+
+The full picture, when the player picks "I'll take the job" from a blacksmith dialogue:
+
+```
+1. Player clicks choice in DRPGDialogueScreen UI
+2. UDialogueSubsystem::AdvanceDialogue(ChoiceIndex)
+3. Choice's actions execute:
+   - StartQuest action → UQuestSubsystem::StartQuest(quest.kill_goblins)
+   - EmitEvent action → GES emits dialogue.event.choice_made
+4. UQuestSubsystem fires OnQuestStarted → HUD updates
+5. Later: player kills a goblin
+6. CombatComponent emits event.combat.kill (bag: VictimType=enemy.goblin)
+7. UQuestSubsystem::OnGameEvent runs every objective expression
+8. CompareTag matches → counter ++
+9. OnQuestObjectiveUpdated fires → HUD refresh
+10. RequiredCount reached → quest completes → fires event.quest.completed
+11. Other dialogues' conditions can now read that completion state
+```
+
+Notice nothing in that chain has a hard-coded reference to a specific dialogue, quest, or enemy type. It's all tags and data assets.
+
+## What I'd Do Differently
+
+Honest list:
+
+1. **The graph compiler should run as a CommitTransaction step**, not on save. Right now you can leave a dialogue in an invalid state for a session and only find out when you ctrl-S. Annoying.
+
+2. **`FInstancedStruct` editor UX has rough edges.** The dropdown to pick a concrete type is fine, but copy-pasting nested expressions between assets sometimes drops fields. I lost a half-hour to that more than once.
+
+3. **Quest definitions should support quest **lines**.** Right now `RequiredCompletedQuests` gives me prerequisites, but I have to chain them manually. A first-class `UQuestLineDefinition` would clean that up.
+
+4. **Analytics ring buffer is per-tag**, which means rare events get pushed out by spammy ones if I'm not careful. Probably wants a per-tag capacity override.
+
+## Why I Like This Design
+
+The thing that keeps surprising me: **adding new quest types requires zero engineering work.** I write a single `FQuestExpression_Foo` struct with one virtual override, and every existing quest, dialogue condition, and analytics dashboard can use it.
+
+When the dialogue system shipped, I didn't write a single line of QuestSystem code to integrate. The expressions were already there, the events already flowed, the bag already carried what they needed. Modules that don't know about each other compose better than modules that do.
+
+That's the whole pitch.
+
+Watch it action here  : 
+<div class="w-3/4 max-w-[800px] aspect-video mx-auto">
+<iframe
+    src={`https://www.youtube.com/embed/680qFSkK1tg`}
+    class="w-full h-full rounded-lg"
+    allowfullscreen>
+    </iframe>
+</div>
+
+---
+
+*DungeonRPG is built with Unreal Engine 5.5 in C++. The full module stack — `GameEvents`, `QuestSystem`, `DialogueSystem`, `DialogueSystemEditor` — is around 4,500 lines. Smaller than I expected, mostly because none of them know each other.*
