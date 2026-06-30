@@ -27,7 +27,7 @@ const params = Astro.params;
 
 <BaseLayout title={"Blog - " + params.tag} sideBarActiveItemID="blog">
   <div class="mb-5">
-    <div class="text-3xl w-full font-bold">Blog - {params.tag}</div>
+    <h1 class="text-3xl w-full font-bold">Blog - {params.tag}</h1>
   </div>
   {
     page.data.length === 0 ? (
@@ -41,6 +41,7 @@ const params = Astro.params;
           <>
             <HorizontalCard
               title={post.data.title}
+              titleTag="h2"
               img={post.data.heroImage}
               desc={post.data.description}
               url={`${import.meta.env.BASE_URL}blog/${createSlug(post.data.title, post.slug)}`}

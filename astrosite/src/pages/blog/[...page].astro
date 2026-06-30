@@ -15,7 +15,7 @@ const { page } = Astro.props;
 
 <BaseLayout title="Blog" sideBarActiveItemID="blog">
   <div class="mb-5">
-    <div class="text-3xl w-full font-bold">Blog</div>
+    <h1 class="text-3xl w-full font-bold">Blog</h1>
   </div>
 
   {
@@ -30,6 +30,7 @@ const { page } = Astro.props;
           <>
             <HorizontalCard
               title={post.data.title}
+              titleTag="h2"
               img={post.data.heroImage}
               desc={post.data.description}
               url={`${import.meta.env.BASE_URL}blog/${createSlug(post.data.title, post.slug)}`}

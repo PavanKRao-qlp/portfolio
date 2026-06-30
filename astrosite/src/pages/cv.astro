@@ -1,23 +1,31 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+
+const pdfUrl = `${import.meta.env.BASE_URL}PavanKumarRao.pdf`;
 ---
 
 <BaseLayout title="CV" includeSidebar={true} sideBarActiveItemID="cv">
   <div class="flex flex-col w-full h-screen p-0 m-0">
-    <!-- Top bar with Download button -->
-    <div>
-      <a href={`${import.meta.env.BASE_URL}PavanKumarRao.pdf`}>
-        <button class="btn btn-block btn-info">Download Resume</button>
+    <!-- Top bar: works on every device -->
+    <div class="flex flex-col sm:flex-row gap-2">
+      <a class="flex-1" href={pdfUrl} target="_blank" rel="noopener">
+        <button class="btn btn-block btn-info">Open Resume (PDF)</button>
+      </a>
+      <a class="flex-1" href={pdfUrl} download>
+        <button class="btn btn-block btn-outline">Download Resume</button>
       </a>
     </div>
 
-    <!-- PDF Embed -->
-    <div class="flex-1">
-      <embed
-        src={`${import.meta.env.BASE_URL}PavanKumarRao.pdf`}
-        type="application/pdf"
-        class="w-full h-full"
-      />
+    <!-- Inline preview: reliable on desktop, blank on most mobile browsers -->
+    <div class="hidden md:block flex-1 mt-2">
+      <embed src={pdfUrl} type="application/pdf" class="w-full h-full" />
+    </div>
+
+    <!-- Mobile fallback: embeds don't render on iOS/Android, so show a prompt -->
+    <div class="md:hidden flex-1 flex items-center justify-center text-center p-6">
+      <p class="opacity-75">
+        Tap <span class="font-semibold">Open Resume (PDF)</span> above to view the resume.
+      </p>
     </div>
   </div>
 </BaseLayout>

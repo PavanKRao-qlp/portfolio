@@ -14,9 +14,10 @@ const personalProjects = projects
 ---
 
 <BaseLayout title="Projects" sideBarActiveItemID="projects">
+  <h1 class="text-4xl font-bold mt-6 mb-8">Projects</h1>
   <section>
     <div>
-      <div class="text-3xl w-full font-bold mb-5 mt-10">Professional Works</div>
+      <h2 class="text-3xl w-full font-bold mb-5 mt-10">Professional Works</h2>
     </div>
     {
       workProjects.map((post) => (
@@ -25,6 +26,8 @@ const personalProjects = projects
             title={post.data.title}
             img={post.data.heroImage}
             desc={post.data.description}
+            company={post.data.company}
+            highlights={post.data.highlights}
             url={`${import.meta.env.BASE_URL}projects/${createSlug(post.data.title, post.slug)}`}
             target="_self"
           />
@@ -35,7 +38,7 @@ const personalProjects = projects
   </section>
   <section>
     <div>
-      <div class="text-3xl w-full font-bold mb-5 mt-10">Personal Works</div>
+      <h2 class="text-3xl w-full font-bold mb-5 mt-10">Personal Works</h2>
     </div>
     {
       personalProjects.map((post) => (
@@ -44,6 +47,7 @@ const personalProjects = projects
             title={post.data.title}
             img={post.data.heroImage}
             desc={post.data.description}
+            highlights={post.data.highlights}
             url={`${import.meta.env.BASE_URL}projects/${createSlug(post.data.title, post.slug)}`}
             target="_self"
           />

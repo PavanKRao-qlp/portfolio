@@ -1,9 +1,9 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import HorizontalCard from "../components/HorizontalCard.astro";
+import { Image } from "astro:assets";
 import { getCollection } from "astro:content";
 import { getEntryBySlug } from "astro:content";
-import YT from "../components/YouTube.astro";
 import createSlug from "../lib/createSlug";
 
 const about = await getEntryBySlug("about", "about");
@@ -20,25 +20,88 @@ const { Content: AboutMe } = await about.render();
 const pinnedPosts = posts.filter((p) => p.data.pinned);
 const regularPosts = posts.filter((p) => !p.data.pinned);
 const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 5);
+
+const resumeUrl = `${import.meta.env.BASE_URL}PavanKumarRao.pdf`;
+const linkedinUrl = "https://www.linkedin.com/in/pavan-kumar-rao-82949b119/";
+const githubUrl = "https://github.com/PavanKRao-qlp";
+const email = "raopavank@gmail.com";
+
+const skills = [
+  "C++",
+  "Unreal Engine",
+  "Unity",
+  "Multiplayer",
+  "ECS",
+  "Gameplay Systems",
+];
 ---
 
 <BaseLayout sideBarActiveItemID="home">
-  <section class="prose max-w-6xl p-6">
-    <AboutMe />
-    <div>
-      <a href={`${import.meta.env.BASE_URL}PavanKumarRao.pdf`}>
-        <button class="btn btn-block btn-info">Download Resume</button>
-      </a>
+  <!-- Hero -->
+  <section class="max-w-6xl">
+    <div
+      class="flex flex-col-reverse gap-8 md:flex-row md:items-center md:justify-between"
+    >
+      <div class="flex-1">
+        <h1 class="text-4xl md:text-5xl font-bold leading-tight">
+          Pavan Kumar Rao
+        </h1>
+        <p class="mt-3 text-xl md:text-2xl opacity-90">
+          Senior Gameplay Programmer — Unreal Engine &amp; Unity
+        </p>
+        <p class="mt-2 opacity-70">
+          Pune, India · 8 years building real-time gameplay, multiplayer, and
+          engine systems in C++
+        </p>
+
+        <div class="mt-4">
+          <span class="badge badge-success badge-outline"
+            >Open to gameplay &amp; engine roles</span
+          >
+        </div>
+
+        <div class="mt-3 flex flex-wrap gap-2">
+          {skills.map((s) => <span class="badge badge-outline">{s}</span>)}
+        </div>
+
+        <div class="mt-6 flex flex-wrap gap-2">
+          <a href={resumeUrl} download>
+            <button class="btn btn-info">Download Resume</button>
+          </a>
+          <a href={`mailto:${email}`}>
+            <button class="btn btn-outline">Email</button>
+          </a>
+          <a href={linkedinUrl} target="_blank" rel="noopener">
+            <button class="btn btn-outline">LinkedIn</button>
+          </a>
+          <a href={githubUrl} target="_blank" rel="noopener">
+            <button class="btn btn-outline">GitHub</button>
+          </a>
+        </div>
+      </div>
+
+      <div class="shrink-0 self-center">
+        <Image
+          src={`${import.meta.env.BASE_URL}me.png`}
+          width={400}
+          height={400}
+          format="webp"
+          alt="Portrait of Pavan Kumar Rao"
+          class="mask mask-hexagon w-44 md:w-56"
+        />
+      </div>
     </div>
   </section>
 
-  <!-- renders the MDX -->
+  <!-- About -->
+  <section class="prose max-w-6xl mt-12">
+    <h2>About</h2>
+    <AboutMe />
+  </section>
+
+  <!-- Featured Work -->
   <section>
-    <div>
-      <div class="text-2xl w-full font-bold mb-5 mt-10">
-        Featured Work
-      </div>
-    </div>
+    <h2 class="text-2xl w-full font-bold mb-5 mt-12">Featured Work</h2>
     {
       pinnedProjects.map((post) => (
         <>
@@ -46,6 +109,9 @@ const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 5);
             title={post.data.title}
             img={post.data.heroImage}
             desc={post.data.description}
+            company={post.data.company}
+            type={post.data.type}
+            highlights={post.data.highlights}
             target="_self"
             url={`${import.meta.env.BASE_URL}projects/${createSlug(post.data.title, post.slug)}`}
           />
@@ -60,10 +126,9 @@ const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 5);
     </div>
   </section>
 
+  <!-- Blog -->
   <section>
-    <div>
-      <div class="text-2xl w-full font-bold mb-5 mt-10">Latest from blog</div>
-    </div>
+    <h2 class="text-2xl w-full font-bold mb-5 mt-12">Latest from blog</h2>
     {
       last_posts.map((post) => (
         <>
@@ -74,6 +139,7 @@ const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 5);
             url={`${import.meta.env.BASE_URL}blog/${createSlug(post.data.title, post.slug)}`}
             target="_self"
             badge={post.data.badge}
+            tags={post.data.tags}
           />
           <div class="divider my-0" />
         </>
@@ -86,39 +152,25 @@ const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 5);
     </div>
   </section>
 
+  <!-- Contact -->
   <section class="block">
-    <div>
-      <div class="text-2xl w-full font-bold mb-5 mt-10">Contact</div>
-    </div>
-    <section class="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-5xl mx-auto">
-      <div class="card card-border bg-base-100 card-sm w-96 shadow-sm">
+    <h2 class="text-2xl w-full font-bold mb-5 mt-12">Contact</h2>
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-5xl">
+      <div class="card card-border bg-base-100 card-sm w-full shadow-sm">
         <div class="card-body">
-          <h3 class="card-title">Address</h3>
-          <p>Baner, Pune,<br /> Maharashtra 411045</p>
+          <h3 class="card-title">Email</h3>
+          <a href={`mailto:${email}`}>{email}</a>
         </div>
       </div>
 
-      <div class="card card-border bg-base-100 card-sm w-96 shadow-sm">
-        <div class="card-body">
-          <h3 class="card-title">Phone</h3>
-          <p>(+91) 7624853821</p>
-        </div>
-      </div>
-
-      <div class="card card-border bg-base-100 card-sm w-96 shadow-sm">
-        <div class="card-body">
-          <h2 class="card-title">Email</h2>
-          <a href="mailto:raopavank@gmail.com">raopavank@gmail.com</a>
-        </div>
-      </div>
-
-      <div class="card card-border bg-base-100 card-sm w-96 shadow-sm">
+      <div class="card card-border bg-base-100 card-sm w-full shadow-sm">
         <div class="card-body">
           <h3 class="card-title">Socials</h3>
           <div>
             <a
-              href="https://github.com/PavanKRao-qlp"
+              href={githubUrl}
               target="_blank"
+              rel="noopener"
               class="mx-3"
               aria-label="Github"
               title="Github"
@@ -140,8 +192,9 @@ const last_posts = [...pinnedPosts, ...regularPosts].slice(0, 5);
               </div>
             </a>
             <a
-              href="https://www.linkedin.com/in/pavan-kumar-rao-82949b119/"
+              href={linkedinUrl}
               target="_blank"
+              rel="noopener"
               class="mx-3"
               aria-label="Linkedin"
               title="Linkedin"

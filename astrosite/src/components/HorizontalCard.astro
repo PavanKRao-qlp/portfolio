@@ -1,6 +1,24 @@
 ---
-const { title, img, desc, url, badge, tags, target = "_blank" } = Astro.props;
+const {
+  title,
+  img,
+  desc,
+  url,
+  badge,
+  tags,
+  target = "_blank",
+  titleTag = "h3",
+  company,
+  type,
+  highlights,
+} = Astro.props;
 import { Image } from "astro:assets";
+
+const TitleTag = titleTag;
+
+// Company label for work, "Personal Project" otherwise (blog cards pass neither)
+const companyLabel = company || (type === "personal" ? "Personal Project" : null);
+const hasHighlights = highlights && highlights.length > 0;
 
 // Only compute tag_url if url exists
 const tag_url = url ? url.split("/").slice(0, -1).join("/") + "/tag" : null;
@@ -24,11 +42,24 @@ const tag_url = url ? url.split("/").slice(0, -1).join("/") + "/tag" : null;
             />
           )}
           <div class="grow w-full">
-            <h1 class="text-xl font-bold">
+            <TitleTag class="text-xl font-bold">
               {title}
-              {badge && <div class="badge badge-secondary mx-2">{badge}</div>}
-            </h1>
-            <p class="py-1 text-1xl">{desc}</p>
+              {badge && <span class="badge badge-secondary mx-2">{badge}</span>}
+            </TitleTag>
+            {companyLabel && (
+              <div class="mt-1">
+                <span class="badge badge-outline badge-sm">{companyLabel}</span>
+              </div>
+            )}
+            {hasHighlights ? (
+              <ul class="py-1 mt-1 list-disc ml-5 space-y-1">
+                {highlights.map((h) => (
+                  <li set:html={h} />
+                ))}
+              </ul>
+            ) : (
+              <p class="py-1 text-1xl">{desc}</p>
+            )}
 
             <div class="card-actions justify-end">
               {tags &&
@@ -55,11 +86,24 @@ const tag_url = url ? url.split("/").slice(0, -1).join("/") + "/tag" : null;
           />
         )}
         <div class="grow w-full">
-          <h1 class="text-xl font-bold">
+          <TitleTag class="text-xl font-bold">
             {title}
-            {badge && <div class="badge badge-secondary mx-2">{badge}</div>}
-          </h1>
-          <p class="py-1 text-1xl">{desc}</p>
+            {badge && <span class="badge badge-secondary mx-2">{badge}</span>}
+          </TitleTag>
+          {companyLabel && (
+            <div class="mt-1">
+              <span class="badge badge-outline badge-sm">{companyLabel}</span>
+            </div>
+          )}
+          {hasHighlights ? (
+            <ul class="py-1 mt-1 list-disc ml-5 space-y-1">
+              {highlights.map((h) => (
+                <li set:html={h} />
+              ))}
+            </ul>
+          ) : (
+            <p class="py-1 text-1xl">{desc}</p>
+          )}
           <div class="card-actions justify-end">
             {tags &&
               tags.map((tag) => <span class="badge badge-outline">{tag}</span>)}

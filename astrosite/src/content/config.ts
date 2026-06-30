@@ -47,7 +47,9 @@ const projectSchema = z.object({
     badge: z.string().optional(),    
     priority: z.number().int().default(0).optional(),
     pin: z.boolean().default(false).optional(),
-    type: z.enum(["work", "personal"]).default("personal")// 👈 added
+    type: z.enum(["work", "personal"]).default("personal"),// 👈 added
+    company: z.string().optional(),
+    highlights: z.array(z.string()).optional(),
 });
 export type ProjectSchema = z.infer<typeof projectSchema>;
 const projectCollection = defineCollection({schema: projectSchema});
